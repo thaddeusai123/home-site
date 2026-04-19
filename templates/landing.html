@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+
+<section class="hs-card" style="max-width:800px;">
+  <h2>Welcome</h2>
+  <p class="hs-muted">Personal tools running on the Home Website Pi. Pick an app from the sidebar or the tiles below.</p>
+</section>
+
+<section class="hs-app-grid">
+  {% for a in apps %}
+    <a class="hs-app-tile" href="{{ url_for(a.url_endpoint) }}">
+      <div class="hs-app-tile-head">
+        <span class="hs-app-tile-icon">{{ a.icon }}</span>
+        <h3>{{ a.name }}</h3>
+      </div>
+      <p class="hs-app-tile-tagline">{{ a.tagline }}</p>
+      <div class="hs-app-tile-cta">Open →</div>
+    </a>
+  {% endfor %}
+</section>
+
+{% endblock %}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %} · Home Website</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="hs-shell">
+    <aside class="hs-sidebar">
+      <div class="hs-sidebar-brand">
+        <span class="hs-logo">⌂</span>
+        <div>
+          <h1>{{ app_name }}</h1>
+          <p class="hs-tagline">Personal tools</p>
+        </div>
+      </div>
+
+      <nav class="hs-nav">
+        <a href="{{ url_for('landing') }}" {% if not current_app_slug %}class="hs-nav-active"{% endif %}>
+          <span class="hs-nav-icon">🏠</span> Home
+        </a>
+        {% for a in registered_apps %}
+          <a href="{{ url_for(a.url_endpoint) }}" {% if current_app_slug == a.slug %}class="hs-nav-active"{% endif %}>
+            <span class="hs-nav-icon">{{ a.icon }}</span> {{ a.name }}
+          </a>
+        {% endfor %}
+      </nav>
+    </aside>
+
+    <div class="hs-content">
+      {% if current_app_slug %}
+        {% set current_app = (registered_apps | selectattr('slug', 'equalto', current_app_slug) | list | first) %}
+        <div class="hs-breadcrumb">
+          <a href="{{ url_for('landing') }}">Home</a>
+          <span class="hs-sep">/</span>
+          <strong>{{ current_app.name if current_app else current_app_slug }}</strong>
+        </div>
+      {% endif %}
+
+      <main class="hs-main">
+        {% if not_found %}
+          <div class="hs-card"><h2>Not found</h2><p>That page doesn't exist.</p></div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="hs-footer">
+        <span>Home Website · Raspberry Pi · {{ now_year }}</span>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

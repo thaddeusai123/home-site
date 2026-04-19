@@ -1,0 +1,523 @@
+{% extends "base.html" %}
+{% block title %}Poop Tracker{% endblock %}
+{% block content %}
+<style>
+  .pt-wrap { max-width: 900px; margin: 0 auto; }
+
+  /* Kid selector tabs */
+  .pt-kids { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+  .pt-kid-tab {
+    padding: 8px 18px; border-radius: 8px; border: 2px solid var(--hl-border);
+    background: var(--hl-panel); color: var(--hl-text); cursor: pointer;
+    font-size: 15px; font-weight: 600; transition: all 120ms;
+  }
+  .pt-kid-tab:hover { border-color: var(--hl-accent); }
+  .pt-kid-tab.active { border-color: var(--hl-accent); background: rgba(46,196,182,0.15); color: var(--hl-accent); }
+  .pt-kid-add {
+    padding: 8px 14px; border-radius: 8px; border: 2px dashed var(--hl-border);
+    background: transparent; color: var(--hl-muted); cursor: pointer; font-size: 15px;
+  }
+  .pt-kid-add:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
+
+  /* Big poop button */
+  .pt-log-section { text-align: center; margin: 24px 0 16px; }
+  .pt-big-btn {
+    width: 200px; height: 200px; border-radius: 50%; border: 4px solid var(--hl-accent);
+    background: linear-gradient(135deg, #1a3040 0%, #0f2030 100%);
+    color: var(--hl-accent); font-size: 64px; cursor: pointer;
+    transition: all 180ms; display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 30px rgba(46,196,182,0.15);
+    position: relative;
+  }
+  .pt-big-btn:hover { transform: scale(1.06); box-shadow: 0 0 50px rgba(46,196,182,0.3); border-color: var(--hl-accent-2); }
+  .pt-big-btn:active { transform: scale(0.96); }
+  .pt-big-btn.pt-logged {
+    border-color: var(--hl-ok); box-shadow: 0 0 40px rgba(112,216,132,0.3);
+    animation: pt-pop 400ms ease-out;
+  }
+  @keyframes pt-pop {
+    0%   { transform: scale(0.95); }
+    50%  { transform: scale(1.12); }
+    100% { transform: scale(1); }
+  }
+
+  .pt-big-label { font-size: 14px; color: var(--hl-muted); margin-top: 12px; }
+
+  /* Time adjuster */
+  .pt-time-row {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin: 16px 0 8px; flex-wrap: wrap;
+  }
+  .pt-time-btn {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--hl-border);
+    background: var(--hl-panel); color: var(--hl-text); cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: all 100ms;
+  }
+  .pt-time-btn:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
+  .pt-time-display {
+    font-size: 18px; font-weight: 700; color: var(--hl-accent);
+    min-width: 170px; text-align: center; font-family: var(--hl-mono);
+  }
+  .pt-time-reset {
+    padding: 4px 10px; border-radius: 4px; border: 1px solid var(--hl-border);
+    background: transparent; color: var(--hl-muted); cursor: pointer; font-size: 11px;
+  }
+  .pt-time-reset:hover { color: var(--hl-accent); border-color: var(--hl-accent); }
+
+  /* Custom date/time input */
+  .pt-custom-row {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin: 8px 0 24px; flex-wrap: wrap;
+  }
+  .pt-custom-input {
+    padding: 7px 10px; border-radius: 6px; border: 1px solid var(--hl-border);
+    background: var(--hl-bg-alt); color: var(--hl-text); font-size: 14px;
+    font-family: var(--hl-mono);
+  }
+  .pt-custom-input:focus { border-color: var(--hl-accent); outline: none; }
+
+  /* Warning banner */
+  .pt-warning {
+    background: rgba(255,179,71,0.12); border: 1px solid var(--hl-warn); border-radius: 8px;
+    padding: 14px 18px; margin: 16px 0; color: var(--hl-warn); font-weight: 600;
+    display: none; text-align: center; font-size: 15px;
+  }
+  .pt-warning.visible { display: block; }
+
+  /* Prediction */
+  .pt-prediction {
+    text-align: center; font-size: 14px; color: var(--hl-muted); margin: 8px 0 20px;
+  }
+  .pt-prediction strong { color: var(--hl-accent); }
+
+  /* Stats grid */
+  .pt-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px; margin: 20px 0;
+  }
+  .pt-stat {
+    background: var(--hl-panel); border: 1px solid var(--hl-border); border-radius: 8px;
+    padding: 16px; text-align: center;
+  }
+  .pt-stat-val { font-size: 28px; font-weight: 700; color: var(--hl-accent); font-family: var(--hl-mono); }
+  .pt-stat-label { font-size: 12px; color: var(--hl-muted); margin-top: 4px; }
+
+  /* Charts */
+  .pt-chart-section { margin: 24px 0; }
+  .pt-chart-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: var(--hl-text); }
+  .pt-chart {
+    background: var(--hl-panel); border: 1px solid var(--hl-border); border-radius: 8px;
+    padding: 16px; overflow-x: auto;
+  }
+  .pt-bar-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; min-width: fit-content; }
+  .pt-bar {
+    background: var(--hl-accent); border-radius: 3px 3px 0 0; min-width: 14px;
+    flex: 1; max-width: 30px; position: relative; transition: height 300ms ease;
+  }
+  .pt-bar:hover { background: var(--hl-accent-2); }
+  .pt-bar-label {
+    position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: var(--hl-muted); white-space: nowrap;
+  }
+  .pt-bar-val {
+    position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: var(--hl-accent-2); font-weight: 700;
+  }
+
+  /* Recent log */
+  .pt-log-list { margin: 20px 0; }
+  .pt-log-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid var(--hl-border);
+    font-size: 14px;
+  }
+  .pt-log-item:last-child { border-bottom: none; }
+  .pt-log-time { font-family: var(--hl-mono); color: var(--hl-accent); }
+  .pt-log-ago { color: var(--hl-muted); font-size: 12px; margin-left: 10px; }
+  .pt-log-del {
+    background: none; border: none; color: var(--hl-muted); cursor: pointer;
+    font-size: 16px; padding: 2px 6px;
+  }
+  .pt-log-del:hover { color: var(--hl-danger); }
+
+  /* Add kid modal */
+  .pt-modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000;
+    display: none; align-items: center; justify-content: center;
+  }
+  .pt-modal-bg.visible { display: flex; }
+  .pt-modal {
+    background: var(--hl-panel); border: 1px solid var(--hl-border); border-radius: 12px;
+    padding: 28px; min-width: 320px;
+  }
+  .pt-modal h3 { margin: 0 0 16px; }
+  .pt-modal input {
+    width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--hl-border);
+    background: var(--hl-bg); color: var(--hl-text); font-size: 16px; margin-bottom: 16px;
+  }
+  .pt-modal input:focus { border-color: var(--hl-accent); outline: none; }
+  .pt-modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .pt-modal-btns button {
+    padding: 8px 18px; border-radius: 6px; border: 1px solid var(--hl-border);
+    cursor: pointer; font-size: 14px; font-weight: 600;
+  }
+  .pt-btn-cancel { background: var(--hl-panel-alt); color: var(--hl-text); }
+  .pt-btn-confirm { background: var(--hl-accent); color: #0a1418; border-color: var(--hl-accent); }
+
+  /* Section titles */
+  .pt-section-title {
+    font-size: 17px; font-weight: 700; margin: 28px 0 12px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--hl-border);
+  }
+
+  @media (max-width: 600px) {
+    .pt-big-btn { width: 160px; height: 160px; font-size: 52px; }
+    .pt-stats { grid-template-columns: repeat(2, 1fr); }
+    .pt-time-display { min-width: 140px; font-size: 15px; }
+  }
+</style>
+
+<div class="pt-wrap">
+  <!-- Kid tabs -->
+  <div class="pt-kids" id="ptKidTabs"></div>
+
+  <!-- Warning banner -->
+  <div class="pt-warning" id="ptWarning"></div>
+
+  <!-- Big button -->
+  <div class="pt-log-section">
+    <button class="pt-big-btn" id="ptBigBtn" onclick="ptLogPoop()">&#x1f4a9;</button>
+    <div class="pt-big-label" id="ptBigLabel">Tap to log a poop</div>
+  </div>
+
+  <!-- Time adjusters -->
+  <div class="pt-time-row">
+    <button class="pt-time-btn" onclick="ptAdjust(-60)">-1h</button>
+    <button class="pt-time-btn" onclick="ptAdjust(-15)">-15m</button>
+    <button class="pt-time-btn" onclick="ptAdjust(-5)">-5m</button>
+    <div class="pt-time-display" id="ptTimeDisplay">Now</div>
+    <button class="pt-time-btn" onclick="ptAdjust(5)">+5m</button>
+    <button class="pt-time-btn" onclick="ptAdjust(15)">+15m</button>
+    <button class="pt-time-btn" onclick="ptAdjust(60)">+1h</button>
+  </div>
+  <div style="text-align:center; margin-bottom: 4px;">
+    <button class="pt-time-reset" onclick="ptResetTime()">Reset to Now</button>
+  </div>
+
+  <!-- Custom date/time -->
+  <div class="pt-custom-row">
+    <label style="font-size:13px; color:var(--hl-muted);">Custom:</label>
+    <input type="date" class="pt-custom-input" id="ptCustomDate">
+    <input type="time" class="pt-custom-input" id="ptCustomTime">
+    <button class="pt-time-btn" onclick="ptApplyCustom()">Set</button>
+  </div>
+
+  <!-- Prediction -->
+  <div class="pt-prediction" id="ptPrediction"></div>
+
+  <!-- Stats cards -->
+  <div class="pt-stats" id="ptStats"></div>
+
+  <!-- Hourly distribution chart -->
+  <div class="pt-chart-section">
+    <div class="pt-chart-title">Hourly Distribution</div>
+    <div class="pt-chart" id="ptHourlyChart"></div>
+  </div>
+
+  <!-- Daily counts chart -->
+  <div class="pt-chart-section">
+    <div class="pt-chart-title">Daily Counts (Last 30 Days)</div>
+    <div class="pt-chart" id="ptDailyChart"></div>
+  </div>
+
+  <!-- Gap trend chart -->
+  <div class="pt-chart-section">
+    <div class="pt-chart-title">Time Between Poops (hours)</div>
+    <div class="pt-chart" id="ptGapChart"></div>
+  </div>
+
+  <!-- Recent log -->
+  <div class="pt-section-title">Recent Log</div>
+  <div class="pt-chart">
+    <div class="pt-log-list" id="ptLogList"></div>
+  </div>
+</div>
+
+<!-- Add kid modal -->
+<div class="pt-modal-bg" id="ptAddKidModal">
+  <div class="pt-modal">
+    <h3>Add a Kid</h3>
+    <input type="text" id="ptNewKidName" placeholder="Name" autofocus>
+    <div class="pt-modal-btns">
+      <button class="pt-btn-cancel" onclick="ptCloseAddKid()">Cancel</button>
+      <button class="pt-btn-confirm" onclick="ptConfirmAddKid()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const API = '/poop-tracker/api';
+  let kids = {{ kids | tojson }};
+  let activeKid = kids.length ? kids[0].id : null;
+  let offsetMinutes = 0; // offset from now
+  let customTime = null; // if set, use this ISO string
+
+  // ── Kid tabs ──
+  function renderKidTabs() {
+    const el = document.getElementById('ptKidTabs');
+    el.innerHTML = kids.map(k =>
+      `<button class="pt-kid-tab ${k.id === activeKid ? 'active' : ''}" onclick="ptSelectKid(${k.id})">${esc(k.name)}</button>`
+    ).join('') + `<button class="pt-kid-add" onclick="ptOpenAddKid()">+ Add Kid</button>`;
+  }
+
+  window.ptSelectKid = function(id) {
+    activeKid = id;
+    renderKidTabs();
+    refresh();
+  };
+
+  window.ptOpenAddKid = function() {
+    document.getElementById('ptAddKidModal').classList.add('visible');
+    document.getElementById('ptNewKidName').value = '';
+    setTimeout(() => document.getElementById('ptNewKidName').focus(), 50);
+  };
+
+  window.ptCloseAddKid = function() {
+    document.getElementById('ptAddKidModal').classList.remove('visible');
+  };
+
+  window.ptConfirmAddKid = async function() {
+    const name = document.getElementById('ptNewKidName').value.trim();
+    if (!name) return;
+    const res = await fetch(`${API}/kids`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      kids.push({id: data.id, name: data.name});
+      activeKid = data.id;
+      renderKidTabs();
+      refresh();
+      ptCloseAddKid();
+    }
+  };
+
+  // ── Time offset ──
+  function getLogTime() {
+    if (customTime) return customTime;
+    const d = new Date(Date.now() + offsetMinutes * 60000);
+    return d.toISOString();
+  }
+
+  function updateTimeDisplay() {
+    const el = document.getElementById('ptTimeDisplay');
+    if (customTime) {
+      const d = new Date(customTime);
+      el.textContent = d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    } else if (offsetMinutes === 0) {
+      el.textContent = 'Now';
+    } else {
+      const sign = offsetMinutes > 0 ? '+' : '';
+      const absMin = Math.abs(offsetMinutes);
+      if (absMin >= 60) {
+        const h = Math.floor(absMin / 60);
+        const m = absMin % 60;
+        el.textContent = `${sign}${offsetMinutes > 0 ? '' : '-'}${h}h${m ? m + 'm' : ''}`;
+      } else {
+        el.textContent = `${sign}${offsetMinutes}m`;
+      }
+    }
+  }
+
+  window.ptAdjust = function(minutes) {
+    customTime = null;
+    offsetMinutes += minutes;
+    updateTimeDisplay();
+  };
+
+  window.ptResetTime = function() {
+    customTime = null;
+    offsetMinutes = 0;
+    updateTimeDisplay();
+  };
+
+  window.ptApplyCustom = function() {
+    const d = document.getElementById('ptCustomDate').value;
+    const t = document.getElementById('ptCustomTime').value;
+    if (!d || !t) return;
+    customTime = new Date(`${d}T${t}`).toISOString();
+    offsetMinutes = 0;
+    updateTimeDisplay();
+  };
+
+  // ── Log a poop ──
+  window.ptLogPoop = async function() {
+    if (!activeKid) return;
+    const btn = document.getElementById('ptBigBtn');
+    const occurredAt = getLogTime();
+    const res = await fetch(`${API}/log`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({kid_id: activeKid, occurred_at: occurredAt})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.classList.add('pt-logged');
+      document.getElementById('ptBigLabel').textContent = 'Logged!';
+      setTimeout(() => {
+        btn.classList.remove('pt-logged');
+        document.getElementById('ptBigLabel').textContent = 'Tap to log a poop';
+      }, 1500);
+      ptResetTime();
+      refresh();
+    }
+  };
+
+  // ── Delete a poop ──
+  window.ptDeletePoop = async function(id) {
+    const res = await fetch(`${API}/log/${id}`, {method: 'DELETE'});
+    const data = await res.json();
+    if (data.ok) refresh();
+  };
+
+  // ── Render stats ──
+  function renderStats(stats) {
+    // Warning
+    const warn = document.getElementById('ptWarning');
+    if (stats.warning) {
+      warn.textContent = `\u26a0\ufe0f It's been ${stats.hours_since_last} hours since the last poop — that's longer than usual!`;
+      warn.classList.add('visible');
+    } else {
+      warn.classList.remove('visible');
+    }
+
+    // Prediction
+    const pred = document.getElementById('ptPrediction');
+    if (stats.predicted_next) {
+      const d = new Date(stats.predicted_next);
+      const now = new Date();
+      const diff = d - now;
+      if (diff > 0) {
+        const hrs = Math.floor(diff / 3600000);
+        const mins = Math.floor((diff % 3600000) / 60000);
+        pred.innerHTML = `Next poop predicted in <strong>${hrs}h ${mins}m</strong> (${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})})`;
+      } else {
+        pred.innerHTML = `Next poop was predicted at <strong>${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</strong> — could be any moment!`;
+      }
+    } else {
+      pred.textContent = stats.count ? '' : 'No data yet — log some poops!';
+    }
+
+    // Stat cards
+    const el = document.getElementById('ptStats');
+    const cards = [];
+    cards.push({val: stats.count, label: 'Total Poops'});
+    cards.push({val: stats.avg_gap_hours != null ? stats.avg_gap_hours + 'h' : '—', label: 'Avg Gap'});
+    cards.push({val: stats.hours_since_last != null ? stats.hours_since_last + 'h' : '—', label: 'Since Last'});
+    cards.push({val: stats.weekly_avg != null ? stats.weekly_avg : '—', label: 'Per Week'});
+    el.innerHTML = cards.map(c =>
+      `<div class="pt-stat"><div class="pt-stat-val">${c.val}</div><div class="pt-stat-label">${c.label}</div></div>`
+    ).join('');
+
+    // Hourly chart
+    renderBarChart('ptHourlyChart', stats.hourly_dist,
+      (v, i) => i.toString().padStart(2, '0'),
+      (v) => v
+    );
+
+    // Daily chart
+    const dailyDates = Object.keys(stats.daily_counts);
+    const dailyVals = dailyDates.map(d => stats.daily_counts[d]);
+    renderBarChart('ptDailyChart', dailyVals,
+      (v, i) => dailyDates[i] ? dailyDates[i].slice(5) : '',
+      (v) => v
+    );
+
+    // Gap chart
+    renderBarChart('ptGapChart', stats.gaps,
+      (v, i) => '',
+      (v) => v
+    );
+  }
+
+  function renderBarChart(elId, values, labelFn, valFn) {
+    const el = document.getElementById(elId);
+    if (!values || !values.length) {
+      el.innerHTML = '<div style="color:var(--hl-muted);padding:20px;text-align:center;">No data yet</div>';
+      return;
+    }
+    const max = Math.max(...values, 1);
+    el.innerHTML = '<div class="pt-bar-chart" style="padding-bottom:24px;">' +
+      values.map((v, i) => {
+        const h = Math.max(2, (v / max) * 100);
+        const label = labelFn(v, i);
+        const val = valFn(v);
+        return `<div class="pt-bar" style="height:${h}px" title="${val}">` +
+          (v > 0 ? `<span class="pt-bar-val">${val}</span>` : '') +
+          (label ? `<span class="pt-bar-label">${label}</span>` : '') +
+          `</div>`;
+      }).join('') +
+      '</div>';
+  }
+
+  // ── Render log ──
+  function renderLog(log) {
+    const el = document.getElementById('ptLogList');
+    if (!log.length) {
+      el.innerHTML = '<div style="color:var(--hl-muted);padding:16px;text-align:center;">No poops logged yet</div>';
+      return;
+    }
+    el.innerHTML = log.map(entry => {
+      const d = new Date(entry.occurred_at);
+      const ago = timeAgo(d);
+      return `<div class="pt-log-item">
+        <div>
+          <span class="pt-log-time">${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+          <span class="pt-log-ago">${ago}</span>
+        </div>
+        <button class="pt-log-del" onclick="ptDeletePoop(${entry.id})" title="Delete">&times;</button>
+      </div>`;
+    }).join('');
+  }
+
+  function timeAgo(d) {
+    const diff = Date.now() - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
+
+  function esc(s) {
+    const el = document.createElement('span');
+    el.textContent = s;
+    return el.innerHTML;
+  }
+
+  // ── Refresh data ──
+  async function refresh() {
+    if (!activeKid) return;
+    const [statsRes, logRes] = await Promise.all([
+      fetch(`${API}/stats/${activeKid}`),
+      fetch(`${API}/log/${activeKid}`)
+    ]);
+    const stats = await statsRes.json();
+    const log = await logRes.json();
+    renderStats(stats);
+    renderLog(log);
+  }
+
+  // Init
+  renderKidTabs();
+  updateTimeDisplay();
+  if (activeKid) refresh();
+
+  // Auto-refresh every 60s
+  setInterval(refresh, 60000);
+})();
+</script>
+{% endblock %}

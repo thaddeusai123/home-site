@@ -1,0 +1,7 @@
+venv/
+.deps.stamp
+*.log
+homesite.db
+homesite.db-shm
+homesite.db-wal
+__pycache__/

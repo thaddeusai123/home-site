@@ -1,0 +1,166 @@
+/* Home Website — sidebar layout + dark theme.
+   CSS variables match the Home Lab's naming (--hl-*) so migrated templates
+   (orchard planner, poop tracker) work without edits. */
+
+:root {
+  --hl-bg:        #0d1418;
+  --hl-bg-alt:    #131c22;
+  --hl-panel:     #182430;
+  --hl-panel-alt: #1f2d3b;
+  --hl-border:    #27384a;
+  --hl-text:      #d8e2ec;
+  --hl-muted:     #7a8a9a;
+  --hl-accent:    #2ec4b6;
+  --hl-accent-2:  #7fd8ce;
+  --hl-warn:      #ffb347;
+  --hl-danger:    #e3645b;
+  --hl-ok:        #70d884;
+  --hl-mono:      ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  background: var(--hl-bg);
+  color: var(--hl-text);
+  line-height: 1.5;
+}
+
+code, pre { font-family: var(--hl-mono); font-size: 0.9em; }
+a { color: var(--hl-accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Shell — sidebar + content */
+.hs-shell { display: flex; min-height: 100vh; }
+
+/* Sidebar */
+.hs-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #142028 0%, #0f1a22 100%);
+  border-right: 1px solid var(--hl-border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.hs-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid var(--hl-border);
+}
+.hs-sidebar-brand h1 { margin: 0; font-size: 18px; letter-spacing: 0.5px; }
+.hs-tagline { margin: 0; color: var(--hl-muted); font-size: 11px; }
+.hs-logo {
+  display: inline-block;
+  font-size: 22px;
+  color: var(--hl-accent);
+  border: 2px solid var(--hl-accent);
+  border-radius: 8px;
+  padding: 1px 8px;
+}
+.hs-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+  flex: 1;
+}
+.hs-nav a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  color: var(--hl-text);
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+  transition: background 100ms, color 100ms;
+}
+.hs-nav a:hover {
+  color: var(--hl-accent);
+  background: rgba(46,196,182,0.06);
+  text-decoration: none;
+}
+.hs-nav a.hs-nav-active {
+  color: var(--hl-accent);
+  background: rgba(46,196,182,0.1);
+  border-left: 3px solid var(--hl-accent);
+  padding-left: 17px;
+}
+.hs-nav-icon { font-size: 16px; width: 22px; text-align: center; }
+
+/* Content area */
+.hs-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.hs-breadcrumb {
+  padding: 8px 32px;
+  font-size: 12px;
+  color: var(--hl-muted);
+  background: var(--hl-bg-alt);
+  border-bottom: 1px solid var(--hl-border);
+}
+.hs-breadcrumb a { color: var(--hl-accent-2); }
+.hs-breadcrumb strong { color: var(--hl-text); font-weight: 600; }
+.hs-sep { color: var(--hl-border); margin: 0 4px; }
+
+.hs-main { padding: 24px 32px 48px; flex: 1; }
+
+.hs-card {
+  background: var(--hl-panel);
+  border: 1px solid var(--hl-border);
+  border-radius: 10px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+}
+.hs-card h2 { margin: 0 0 8px; font-size: 18px; }
+.hs-muted { color: var(--hl-muted); }
+
+/* Landing tiles */
+.hs-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.hs-app-tile {
+  display: block;
+  background: var(--hl-panel);
+  border: 1px solid var(--hl-border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  color: var(--hl-text);
+  text-decoration: none;
+  transition: border-color 140ms, transform 140ms, background 140ms;
+}
+.hs-app-tile:hover {
+  border-color: var(--hl-accent);
+  transform: translateY(-1px);
+  background: var(--hl-panel-alt);
+  text-decoration: none;
+}
+.hs-app-tile-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.hs-app-tile-head h3 { margin: 0; font-size: 17px; }
+.hs-app-tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--hl-bg-alt);
+  border: 1px solid var(--hl-border);
+  font-size: 18px;
+}
+.hs-app-tile-tagline { margin: 6px 0 12px; color: var(--hl-muted); font-size: 13px; line-height: 1.45; }
+.hs-app-tile-cta { color: var(--hl-accent-2); font-size: 12px; font-weight: 600; }
+
+.hs-footer {
+  border-top: 1px solid var(--hl-border);
+  padding: 14px 32px;
+  color: var(--hl-muted);
+  font-size: 12px;
+}

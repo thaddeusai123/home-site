@@ -1,0 +1,788 @@
+{% extends "base.html" %}
+{% block title %}Orchard Planner{% endblock %}
+
+{% block content %}
+<style>
+  .op-wrap {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    height: calc(100vh - 80px);
+    min-height: 500px;
+  }
+  .op-controls {
+    width: 260px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .op-controls label {
+    display: block;
+    font-size: 12px;
+    color: var(--hl-muted);
+    margin-bottom: 4px;
+  }
+  .op-controls input[type="number"] {
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--hl-bg);
+    border: 1px solid var(--hl-border);
+    border-radius: 6px;
+    color: var(--hl-text);
+    font-family: var(--hl-mono);
+    font-size: 14px;
+  }
+  .op-controls input[type="number"]:focus {
+    outline: none;
+    border-color: var(--hl-accent);
+  }
+  .op-field { margin-bottom: 2px; }
+  .op-row-info {
+    font-size: 12px;
+    color: var(--hl-muted);
+    font-family: var(--hl-mono);
+    margin-top: 4px;
+  }
+  .op-readout {
+    font-family: var(--hl-mono);
+    font-size: 13px;
+    line-height: 1.8;
+  }
+  .op-readout span {
+    color: var(--hl-accent-2);
+    font-weight: 600;
+  }
+  .op-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--hl-text);
+    cursor: pointer;
+  }
+  .op-toggle input { accent-color: var(--hl-accent); }
+  .op-canvas-wrap {
+    flex: 1;
+    min-width: 0;
+    background: var(--hl-bg-alt);
+    border: 1px solid var(--hl-border);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  .op-canvas-wrap svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+  .op-layout-btns {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .op-layout-btn {
+    flex: 1;
+    padding: 5px 0;
+    background: var(--hl-bg);
+    border: 1px solid var(--hl-border);
+    border-radius: 6px;
+    color: var(--hl-accent);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .op-layout-btn:hover { border-color: var(--hl-accent); }
+  .op-layout-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .op-layout-btn-danger { color: var(--hl-danger); }
+  .op-layout-btn-danger:hover:not(:disabled) { border-color: var(--hl-danger); }
+  .op-dim-label {
+    font-family: var(--hl-mono);
+    font-size: 1.1px;
+    fill: var(--hl-accent-2);
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    font-weight: 600;
+  }
+  .op-dim-label-bg {
+    fill: var(--hl-bg-alt);
+    opacity: 0.92;
+  }
+
+  @media (max-width: 768px) {
+    .op-wrap {
+      flex-direction: column;
+      height: auto;
+      min-height: 0;
+      padding: 12px;
+      gap: 12px;
+    }
+    .op-controls {
+      width: 100%;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 10px;
+      overflow-y: visible;
+    }
+    .op-controls .hl-card {
+      flex: 1 1 140px;
+      min-width: 140px;
+      padding: 12px 14px;
+    }
+    .op-controls .hl-card h2 {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .op-canvas-wrap {
+      width: 100%;
+      min-height: 50vh;
+      touch-action: none;
+    }
+  }
+</style>
+
+<div class="op-wrap">
+  <!-- Controls -->
+  <div class="op-controls">
+    <div class="hl-card">
+      <h2>Layouts</h2>
+      <div class="op-field">
+        <select id="layoutSelect" style="width:100%;padding:6px 10px;background:var(--hl-bg);border:1px solid var(--hl-border);border-radius:6px;color:var(--hl-text);font-family:var(--hl-mono);font-size:13px;">
+          <option value="">-- Current --</option>
+        </select>
+      </div>
+      <div class="op-layout-btns">
+        <button type="button" id="saveLayout" class="op-layout-btn">Save</button>
+        <button type="button" id="deleteLayout" class="op-layout-btn op-layout-btn-danger" disabled>Delete</button>
+      </div>
+    </div>
+
+    <div class="hl-card">
+      <h2>Fence</h2>
+      <div class="op-field">
+        <label for="fenceW">Width (ft)</label>
+        <input type="number" id="fenceW" value="35" min="10" max="200" step="0.5">
+      </div>
+      <div class="op-field">
+        <label for="fenceD">Depth (ft)</label>
+        <input type="number" id="fenceD" value="60" min="10" max="200" step="0.5">
+      </div>
+    </div>
+
+    <div class="hl-card">
+      <h2>Trees</h2>
+      <div class="op-field">
+        <label for="totalTrees">Total Trees</label>
+        <input type="number" id="totalTrees" value="13" min="1" max="100" step="1">
+      </div>
+      <div class="op-field">
+        <label for="numRows">Number of Rows</label>
+        <input type="number" id="numRows" value="3" min="1" max="20" step="1">
+      </div>
+      <div class="op-field">
+        <label for="padding">Fence Padding (ft)</label>
+        <input type="number" id="padding" value="6" min="0" max="50" step="0.5">
+      </div>
+      <div class="op-field">
+        <label for="gridSnap">Grid Snap (ft)</label>
+        <input type="number" id="gridSnap" value="1" min="0.25" max="5" step="0.25">
+      </div>
+      <div style="margin-top:6px">
+        <button type="button" id="resetLayout" class="hl-btn-sm" style="width:100%;padding:5px 0;background:var(--hl-bg);border:1px solid var(--hl-border);border-radius:6px;color:var(--hl-accent);cursor:pointer;font-size:13px;">Reset Layout</button>
+      </div>
+      <div class="op-row-info" id="rowInfo"></div>
+    </div>
+
+    <div class="hl-card">
+      <h2>Display</h2>
+      <label class="op-toggle">
+        <input type="checkbox" id="showTreeSpacing" checked> Tree-to-tree spacing
+      </label>
+      <label class="op-toggle">
+        <input type="checkbox" id="showFenceSpacing" checked> Tree-to-fence spacing
+      </label>
+    </div>
+
+    <div class="hl-card">
+      <h2>Readout</h2>
+      <div class="op-readout" id="readout"></div>
+    </div>
+  </div>
+
+  <!-- SVG Viewport -->
+  <div class="op-canvas-wrap">
+    <svg id="orchardSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // --- DOM refs ---
+  const svg      = document.getElementById("orchardSvg");
+  const elW      = document.getElementById("fenceW");
+  const elD      = document.getElementById("fenceD");
+  const elTrees  = document.getElementById("totalTrees");
+  const elRows   = document.getElementById("numRows");
+  const elPad    = document.getElementById("padding");
+  const elSnap   = document.getElementById("gridSnap");
+  const elReset  = document.getElementById("resetLayout");
+  const elRowInfo  = document.getElementById("rowInfo");
+  const elReadout  = document.getElementById("readout");
+  const elShowTree = document.getElementById("showTreeSpacing");
+  const elShowFence = document.getElementById("showFenceSpacing");
+  const elLayoutSelect = document.getElementById("layoutSelect");
+  const elSaveLayout   = document.getElementById("saveLayout");
+  const elDeleteLayout = document.getElementById("deleteLayout");
+
+  // --- State ---
+  // Fence defined by origin + size so edges can move independently
+  let fX = 0, fY = 0, fW = 35, fD = 60;
+  let totalTrees = 13, numRows = 3, pad = 6;
+  let gridSnap = 1;           // snap increment in ft
+  const MARGIN = 8;
+  const HANDLE_R = 0.6;
+  const TREE_R   = 0.7;
+
+  // Persistent tree positions (absolute coords) — survives redraws
+  let trees = [];              // [{ x, y, row, col, rowLen }]
+
+  // --- Helpers ---
+  function snap(v) {
+    if (gridSnap <= 0) return v;
+    return Math.round(v / gridSnap) * gridSnap;
+  }
+
+  function distributeTreesAcrossRows(total, rows) {
+    const base = Math.floor(total / rows);
+    const extra = total % rows;
+    const arr = [];
+    for (let i = 0; i < rows; i++) arr.push(base + (i < extra ? 1 : 0));
+    return arr;
+  }
+
+  function resetTreePositions() {
+    const treesPerRow = distributeTreesAcrossRows(totalTrees, numRows);
+    const usableW = fW - 2 * pad;
+    const usableD = fD - 2 * pad;
+    const rowSpacing = numRows > 1 ? usableD / (numRows - 1) : 0;
+    trees = [];
+
+    for (let r = 0; r < numRows; r++) {
+      const n = treesPerRow[r];
+      const y = numRows > 1 ? fY + pad + r * rowSpacing : fY + fD / 2;
+      const treeSpacing = n > 1 ? usableW / (n - 1) : 0;
+      for (let t = 0; t < n; t++) {
+        const x = n > 1 ? fX + pad + t * treeSpacing : fX + fW / 2;
+        trees.push({ x: snap(x), y: snap(y), row: r, col: t, rowLen: n });
+      }
+    }
+  }
+
+  function dist(a, b) {
+    return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  }
+
+  // --- SVG helpers ---
+  const NS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs) {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+    return el;
+  }
+
+  function screenToSvg(evt) {
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  // --- Drag state ---
+  let dragHandle = null;       // fence handle type string
+  let dragFenceOrigin = null;
+  let dragTreeIdx = -1;        // index into trees[]
+
+  // --- Full redraw ---
+  function draw() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    const vbX = fX - MARGIN, vbY = fY - MARGIN;
+    const vbW = fW + MARGIN * 2, vbH = fD + MARGIN * 2;
+    svg.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
+
+    // Defs: grid patterns
+    const defs = svgEl("defs");
+    const pMinor = svgEl("pattern", { id: "gridMinor", width: "1", height: "1", patternUnits: "userSpaceOnUse" });
+    pMinor.appendChild(svgEl("path", { d: "M 1 0 L 0 0 0 1", fill: "none", stroke: "#111d25", "stroke-width": "0.03" }));
+    defs.appendChild(pMinor);
+    const pMajor = svgEl("pattern", { id: "gridMajor", width: "5", height: "5", patternUnits: "userSpaceOnUse" });
+    pMajor.appendChild(svgEl("rect", { width: "5", height: "5", fill: "url(#gridMinor)" }));
+    pMajor.appendChild(svgEl("path", { d: "M 5 0 L 0 0 0 5", fill: "none", stroke: "#1a2830", "stroke-width": "0.05" }));
+    defs.appendChild(pMajor);
+    svg.appendChild(defs);
+
+    // Grid background
+    svg.appendChild(svgEl("rect", { x: vbX, y: vbY, width: vbW, height: vbH, fill: "url(#gridMajor)" }));
+
+    // Fence rectangle
+    svg.appendChild(svgEl("rect", {
+      x: fX, y: fY, width: fW, height: fD,
+      fill: "none", stroke: "#2ec4b6", "stroke-width": "0.15",
+      "stroke-dasharray": "0.6,0.3", rx: "0.2"
+    }));
+
+    // Dimension labels
+    drawDimensionLabel(fX + fW / 2, fY - 1.8, `${fW.toFixed(1)} ft`, 0);
+    drawDimensionLabel(fX + fW / 2, fY + fD + 1.8, `${fW.toFixed(1)} ft`, 0);
+    drawDimensionLabel(fX - 2.5, fY + fD / 2, `${fD.toFixed(1)} ft`, -90);
+    drawDimensionLabel(fX + fW + 2.5, fY + fD / 2, `${fD.toFixed(1)} ft`, -90);
+
+    // Row info
+    const treesPerRow = distributeTreesAcrossRows(totalTrees, numRows);
+    elRowInfo.textContent = `Trees/row: ${treesPerRow.join(", ")}`;
+
+    // --- Spacing labels ---
+    const showTree = elShowTree.checked;
+    const showFence = elShowFence.checked;
+
+    // For tree-to-tree: find nearest neighbor for each tree
+    if (showTree) {
+      // Sort trees into rows by y coordinate for adjacent-in-row lines
+      const rowBuckets = {};
+      for (let i = 0; i < trees.length; i++) {
+        const t = trees[i];
+        // Group by rounded y to handle manually moved trees
+        let matched = false;
+        for (const yk of Object.keys(rowBuckets)) {
+          if (Math.abs(t.y - parseFloat(yk)) < 0.5) {
+            rowBuckets[yk].push(i);
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) rowBuckets[t.y] = [i];
+      }
+
+      // Draw spacing between adjacent trees in each row (sorted by x)
+      for (const indices of Object.values(rowBuckets)) {
+        const sorted = indices.slice().sort((a, b) => trees[a].x - trees[b].x);
+        for (let k = 0; k < sorted.length - 1; k++) {
+          const p = trees[sorted[k]], q = trees[sorted[k + 1]];
+          const d = dist(p, q);
+          const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+          svg.appendChild(svgEl("line", {
+            x1: p.x, y1: p.y, x2: q.x, y2: q.y,
+            stroke: "#7a8a9a", "stroke-width": "0.04", "stroke-dasharray": "0.2,0.15", opacity: "0.6"
+          }));
+          drawSmallLabel(mx, my - 0.7, `${d.toFixed(1)}'`);
+        }
+      }
+
+      // Column spacing — group trees by x coordinate, draw vertical lines
+      const colBuckets = {};
+      for (let i = 0; i < trees.length; i++) {
+        const t = trees[i];
+        let matched = false;
+        for (const xk of Object.keys(colBuckets)) {
+          if (Math.abs(t.x - parseFloat(xk)) < 0.5) {
+            colBuckets[xk].push(i);
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) colBuckets[t.x] = [i];
+      }
+
+      for (const indices of Object.values(colBuckets)) {
+        if (indices.length < 2) continue;
+        const sorted = indices.slice().sort((a, b) => trees[a].y - trees[b].y);
+        for (let k = 0; k < sorted.length - 1; k++) {
+          const p = trees[sorted[k]], q = trees[sorted[k + 1]];
+          const d = dist(p, q);
+          const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+          svg.appendChild(svgEl("line", {
+            x1: p.x, y1: p.y, x2: q.x, y2: q.y,
+            stroke: "#7a8a9a", "stroke-width": "0.04", "stroke-dasharray": "0.2,0.15", opacity: "0.6"
+          }));
+          drawSmallLabel(mx + 0.8, my, `${d.toFixed(1)}'`);
+        }
+      }
+    }
+
+    // Tree-to-fence spacing — show for every tree its nearest fence distance
+    if (showFence) {
+      for (const p of trees) {
+        const dLeft = p.x - fX, dRight = (fX + fW) - p.x, dTop = p.y - fY, dBot = (fY + fD) - p.y;
+        const nearest = Math.min(dLeft, dRight, dTop, dBot);
+        let fx, fy;
+        if (nearest === dLeft)       { fx = fX;      fy = p.y; }
+        else if (nearest === dRight) { fx = fX + fW; fy = p.y; }
+        else if (nearest === dTop)   { fx = p.x;     fy = fY; }
+        else                         { fx = p.x;     fy = fY + fD; }
+
+        svg.appendChild(svgEl("line", {
+          x1: p.x, y1: p.y, x2: fx, y2: fy,
+          stroke: "#4a7a9a", "stroke-width": "0.04", "stroke-dasharray": "0.15,0.1", opacity: "0.6"
+        }));
+        const lx = (p.x + fx) / 2, ly = (p.y + fy) / 2;
+        // Offset label so it doesn't sit on the line
+        const offX = (fx === p.x) ? 0.8 : 0;
+        const offY = (fy === p.y) ? 0.8 : 0;
+        drawSmallLabel(lx + offX, ly + offY, `${nearest.toFixed(1)}'`, "#8ab0cc");
+      }
+    }
+
+    // Tree dots (drawn on top, draggable)
+    for (let i = 0; i < trees.length; i++) {
+      const p = trees[i];
+      const circle = svgEl("circle", {
+        cx: p.x, cy: p.y, r: TREE_R,
+        fill: dragTreeIdx === i ? "#7fd8ce" : "#2ec4b6",
+        opacity: "0.85",
+        stroke: "#7fd8ce", "stroke-width": "0.06",
+        cursor: "grab", "data-tree-idx": i
+      });
+      circle.addEventListener("pointerdown", onTreeDown);
+      svg.appendChild(circle);
+    }
+
+    // Fence drag handles (on top of everything)
+    const handles = [
+      { x: fX,          y: fY,          type: "tl" },
+      { x: fX + fW,     y: fY,          type: "tr" },
+      { x: fX + fW,     y: fY + fD,     type: "br" },
+      { x: fX,          y: fY + fD,     type: "bl" },
+      { x: fX + fW / 2, y: fY,          type: "tm" },
+      { x: fX + fW / 2, y: fY + fD,     type: "bm" },
+      { x: fX,          y: fY + fD / 2, type: "lm" },
+      { x: fX + fW,     y: fY + fD / 2, type: "rm" },
+    ];
+    for (const h of handles) {
+      const el = svgEl("circle", {
+        cx: h.x, cy: h.y, r: HANDLE_R,
+        fill: "#2ec4b6", opacity: "0.9",
+        stroke: "#fff", "stroke-width": "0.08",
+        cursor: "grab", "data-type": h.type
+      });
+      el.addEventListener("pointerdown", onHandleDown);
+      svg.appendChild(el);
+    }
+
+    updateReadout();
+  }
+
+  function drawDimensionLabel(x, y, text, rotate) {
+    const g = svgEl("g", { transform: `translate(${x},${y}) rotate(${rotate || 0})` });
+    const textLen = text.length * 0.65;
+    g.appendChild(svgEl("rect", {
+      x: -textLen / 2 - 0.3, y: -0.7, width: textLen + 0.6, height: 1.4,
+      rx: "0.2", class: "op-dim-label-bg"
+    }));
+    const t = svgEl("text", { x: 0, y: 0, class: "op-dim-label" });
+    t.textContent = text;
+    g.appendChild(t);
+    svg.appendChild(g);
+  }
+
+  function drawSmallLabel(x, y, text, color) {
+    const g = svgEl("g", { "pointer-events": "none" });
+    // Background pill for contrast against grid
+    const textW = text.length * 0.45 + 0.4;
+    g.appendChild(svgEl("rect", {
+      x: x - textW / 2, y: y - 0.45, width: textW, height: 0.9,
+      rx: "0.2", fill: "#0d1418", opacity: "0.8"
+    }));
+    const t = svgEl("text", {
+      x, y,
+      "font-family": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+      "font-size": "0.8",
+      fill: color || "#b0c4d8",
+      "text-anchor": "middle",
+      "dominant-baseline": "central",
+      "font-weight": "600"
+    });
+    t.textContent = text;
+    g.appendChild(t);
+    svg.appendChild(g);
+  }
+
+  function updateReadout() {
+    if (trees.length === 0) {
+      elReadout.innerHTML = "No trees placed.";
+      return;
+    }
+    let minTT = Infinity;
+    for (let i = 0; i < trees.length; i++)
+      for (let j = i + 1; j < trees.length; j++) {
+        const d = dist(trees[i], trees[j]);
+        if (d < minTT) minTT = d;
+      }
+    let minTF = Infinity;
+    for (const p of trees) {
+      const d = Math.min(p.x - fX, (fX + fW) - p.x, p.y - fY, (fY + fD) - p.y);
+      if (d < minTF) minTF = d;
+    }
+    elReadout.innerHTML =
+      `Total trees: <span>${trees.length}</span><br>` +
+      `Fence: <span>${fW.toFixed(1)} x ${fD.toFixed(1)} ft</span><br>` +
+      `Area: <span>${(fW * fD).toFixed(0)} sq ft</span><br>` +
+      `Min tree-tree: <span>${minTT === Infinity ? "N/A" : minTT.toFixed(1) + " ft"}</span><br>` +
+      `Min tree-fence: <span>${minTF === Infinity ? "N/A" : minTF.toFixed(1) + " ft"}</span>`;
+  }
+
+  // --- Tree dragging ---
+  function onTreeDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragTreeIdx = parseInt(e.target.getAttribute("data-tree-idx"), 10);
+    svg.style.cursor = "grabbing";
+    window.addEventListener("pointermove", onTreeMove);
+    window.addEventListener("pointerup", onTreeUp);
+  }
+
+  function onTreeMove(e) {
+    if (dragTreeIdx < 0) return;
+    const pt = screenToSvg(e);
+    // Snap to grid and clamp within fence
+    trees[dragTreeIdx].x = Math.max(fX, Math.min(fX + fW, snap(pt.x)));
+    trees[dragTreeIdx].y = Math.max(fY, Math.min(fY + fD, snap(pt.y)));
+    draw();
+  }
+
+  function onTreeUp() {
+    dragTreeIdx = -1;
+    svg.style.cursor = "";
+    window.removeEventListener("pointermove", onTreeMove);
+    window.removeEventListener("pointerup", onTreeUp);
+    draw();
+    saveState();
+  }
+
+  // --- Fence handle dragging ---
+  function onHandleDown(e) {
+    e.preventDefault();
+    dragHandle = e.target.getAttribute("data-type");
+    dragFenceOrigin = { x: fX, y: fY, w: fW, d: fD };
+    svg.style.cursor = "grabbing";
+    window.addEventListener("pointermove", onHandleMove);
+    window.addEventListener("pointerup", onHandleUp);
+  }
+
+  function onHandleMove(e) {
+    if (!dragHandle) return;
+    // Use live CTM — the viewBox centers on the fence so the mapping stays
+    // correct as long as we work in absolute positions (not deltas).
+    const pt = screenToSvg(e);
+    const sx = Math.round(pt.x * 2) / 2;  // snap to 0.5 ft
+    const sy = Math.round(pt.y * 2) / 2;
+    const MIN = 10;
+    const o = dragFenceOrigin; // original fence rect
+
+    // Each handle moves specific edges to the mouse position.
+    // "left"  = set fX to mouse, adjust fW to keep right edge fixed
+    // "right" = set fW so right edge = mouse, fX unchanged
+    // "top"   = set fY to mouse, adjust fD to keep bottom edge fixed
+    // "bot"   = set fD so bottom edge = mouse, fY unchanged
+
+    const moveLeft  = () => { const r = o.x + o.w; fX = Math.min(sx, r - MIN); fW = r - fX; };
+    const moveRight = () => { fW = Math.max(MIN, sx - fX); };
+    const moveTop   = () => { const b = o.y + o.d; fY = Math.min(sy, b - MIN); fD = b - fY; };
+    const moveBot   = () => { fD = Math.max(MIN, sy - fY); };
+
+    switch (dragHandle) {
+      case "tl": moveLeft(); moveTop(); break;
+      case "tr": moveRight(); moveTop(); break;
+      case "br": moveRight(); moveBot(); break;
+      case "bl": moveLeft(); moveBot(); break;
+      case "tm": moveTop(); break;
+      case "bm": moveBot(); break;
+      case "lm": moveLeft(); break;
+      case "rm": moveRight(); break;
+    }
+
+    fW = Math.round(fW * 2) / 2;
+    fD = Math.round(fD * 2) / 2;
+    fX = Math.round(fX * 2) / 2;
+    fY = Math.round(fY * 2) / 2;
+    elW.value = fW;
+    elD.value = fD;
+
+    // Clamp trees inside the new fence bounds
+    for (const t of trees) {
+      t.x = Math.max(fX, Math.min(fX + fW, t.x));
+      t.y = Math.max(fY, Math.min(fY + fD, t.y));
+    }
+    draw();
+  }
+
+  function onHandleUp() {
+    dragHandle = null;
+    svg.style.cursor = "";
+    window.removeEventListener("pointermove", onHandleMove);
+    window.removeEventListener("pointerup", onHandleUp);
+    saveState();
+  }
+
+  // --- Persistence (localStorage) ---
+  const STORAGE_KEY = "orchardPlannerState";
+
+  function saveState() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(captureSnapshot())); } catch (_) {}
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const s = JSON.parse(raw);
+      if (!Array.isArray(s.trees) || s.trees.length === 0) return false;
+      applySnapshot(s);
+      return true;
+    } catch (_) { return false; }
+  }
+
+  // --- Named layouts (server-side) ---
+  const API_BASE = "/orchard-planner/api/layouts";
+  let layoutsCache = [];  // [{ id, name, data, ... }]
+
+  function captureSnapshot() {
+    return {
+      fX, fY, fW, fD, totalTrees, numRows, pad, gridSnap,
+      trees: trees.map(t => ({ x: t.x, y: t.y, row: t.row, col: t.col, rowLen: t.rowLen })),
+      showTree: elShowTree.checked,
+      showFence: elShowFence.checked,
+    };
+  }
+
+  function applySnapshot(s) {
+    fX = s.fX ?? 0; fY = s.fY ?? 0;
+    fW = s.fW ?? 35; fD = s.fD ?? 60;
+    totalTrees = s.totalTrees ?? 13;
+    numRows = s.numRows ?? 3;
+    pad = s.pad ?? 6;
+    gridSnap = s.gridSnap ?? 1;
+    if (Array.isArray(s.trees) && s.trees.length > 0) trees = s.trees;
+    else { resetTreePositions(); }
+    elW.value = fW; elD.value = fD;
+    elTrees.value = totalTrees; elRows.value = numRows;
+    elPad.value = pad; elSnap.value = gridSnap;
+    elShowTree.checked = s.showTree !== false;
+    elShowFence.checked = s.showFence !== false;
+  }
+
+  async function fetchLayouts() {
+    try {
+      const res = await fetch(API_BASE);
+      layoutsCache = await res.json();
+    } catch (_) { layoutsCache = []; }
+  }
+
+  function populateLayoutSelect() {
+    const cur = elLayoutSelect.value;
+    while (elLayoutSelect.options.length > 1) elLayoutSelect.remove(1);
+    for (const l of layoutsCache) {
+      const opt = document.createElement("option");
+      opt.value = String(l.id);
+      opt.textContent = l.name;
+      elLayoutSelect.appendChild(opt);
+    }
+    if (cur && layoutsCache.some(l => String(l.id) === cur)) elLayoutSelect.value = cur;
+    else elLayoutSelect.value = "";
+    elDeleteLayout.disabled = !elLayoutSelect.value;
+  }
+
+  elSaveLayout.addEventListener("click", async function () {
+    const name = prompt("Layout name:");
+    if (!name || !name.trim()) return;
+    elSaveLayout.disabled = true;
+    try {
+      const res = await fetch(API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), data: captureSnapshot() }),
+      });
+      const result = await res.json();
+      if (!res.ok) { alert(result.error || "Save failed"); return; }
+      await fetchLayouts();
+      populateLayoutSelect();
+      elLayoutSelect.value = String(result.id);
+      elDeleteLayout.disabled = false;
+    } finally { elSaveLayout.disabled = false; }
+  });
+
+  elDeleteLayout.addEventListener("click", async function () {
+    const id = elLayoutSelect.value;
+    if (!id) return;
+    const layout = layoutsCache.find(l => String(l.id) === id);
+    if (!confirm("Delete layout \"" + (layout ? layout.name : id) + "\"?")) return;
+    elDeleteLayout.disabled = true;
+    try {
+      await fetch(API_BASE + "/" + id, { method: "DELETE" });
+      await fetchLayouts();
+      elLayoutSelect.value = "";
+      populateLayoutSelect();
+    } finally { elDeleteLayout.disabled = !elLayoutSelect.value; }
+  });
+
+  elLayoutSelect.addEventListener("change", function () {
+    const id = elLayoutSelect.value;
+    elDeleteLayout.disabled = !id;
+    if (!id) return;
+    const layout = layoutsCache.find(l => String(l.id) === id);
+    if (!layout) return;
+    const data = typeof layout.data === "string" ? JSON.parse(layout.data) : layout.data;
+    applySnapshot(data);
+    draw();
+    saveState();
+  });
+
+  // --- Input event wiring ---
+  function syncFromInputs() {
+    fW = parseFloat(elW.value) || 35;
+    fD = parseFloat(elD.value) || 60;
+    totalTrees = parseInt(elTrees.value, 10) || 1;
+    numRows = parseInt(elRows.value, 10) || 1;
+    pad = parseFloat(elPad.value) || 0;
+    gridSnap = parseFloat(elSnap.value) || 1;
+
+    if (numRows > totalTrees) {
+      numRows = totalTrees;
+      elRows.value = numRows;
+    }
+
+    resetTreePositions();
+    draw();
+    saveState();
+  }
+
+  // Grid snap changes don't reset layout — just update the snap value
+  elSnap.addEventListener("input", function () {
+    gridSnap = parseFloat(elSnap.value) || 1;
+    saveState();
+  });
+
+  elW.addEventListener("input", syncFromInputs);
+  elD.addEventListener("input", syncFromInputs);
+  elTrees.addEventListener("input", syncFromInputs);
+  elRows.addEventListener("input", syncFromInputs);
+  elPad.addEventListener("input", syncFromInputs);
+  elShowTree.addEventListener("change", function () { draw(); saveState(); });
+  elShowFence.addEventListener("change", function () { draw(); saveState(); });
+  elReset.addEventListener("click", function () {
+    resetTreePositions();
+    draw();
+    saveState();
+  });
+
+  // --- Initial setup ---
+  if (!loadState()) resetTreePositions();
+  draw();
+  fetchLayouts().then(populateLayoutSelect);
+})();
+</script>
+{% endblock %}
