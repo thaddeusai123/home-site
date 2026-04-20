@@ -8,7 +8,16 @@
 </head>
 <body>
   <div class="hs-shell">
-    <aside class="hs-sidebar">
+    <!-- Mobile top bar -->
+    <div class="hs-mobile-bar">
+      <button type="button" class="hs-hamburger" id="hsHamburger" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="hs-mobile-title">{{ app_name }}</span>
+    </div>
+    <div class="hs-sidebar-backdrop" id="hsBackdrop"></div>
+
+    <aside class="hs-sidebar" id="hsSidebar">
       <div class="hs-sidebar-brand">
         <span class="hs-logo">⌂</span>
         <div>
@@ -51,5 +60,26 @@
       </footer>
     </div>
   </div>
+
+  <script>
+  (function() {
+    var btn = document.getElementById('hsHamburger');
+    var sidebar = document.getElementById('hsSidebar');
+    var backdrop = document.getElementById('hsBackdrop');
+    function toggle() {
+      sidebar.classList.toggle('hs-sidebar-open');
+      backdrop.classList.toggle('hs-sidebar-open');
+    }
+    function close() {
+      sidebar.classList.remove('hs-sidebar-open');
+      backdrop.classList.remove('hs-sidebar-open');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (backdrop) backdrop.addEventListener('click', close);
+    // Close sidebar when a nav link is tapped on mobile
+    var links = sidebar ? sidebar.querySelectorAll('a') : [];
+    links.forEach(function(a) { a.addEventListener('click', close); });
+  })();
+  </script>
 </body>
 </html>

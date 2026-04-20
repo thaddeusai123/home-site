@@ -19,15 +19,18 @@
   }
   .pt-kid-add:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
 
-  /* Big poop button */
+  /* Button row — signs + poop side by side */
   .pt-log-section { text-align: center; margin: 24px 0 16px; }
+  .pt-btn-row {
+    display: flex; align-items: center; justify-content: center; gap: 32px;
+    flex-wrap: wrap;
+  }
   .pt-big-btn {
     width: 200px; height: 200px; border-radius: 50%; border: 4px solid var(--hl-accent);
     background: linear-gradient(135deg, #1a3040 0%, #0f2030 100%);
     color: var(--hl-accent); font-size: 64px; cursor: pointer;
     transition: all 180ms; display: inline-flex; align-items: center; justify-content: center;
     box-shadow: 0 0 30px rgba(46,196,182,0.15);
-    position: relative;
   }
   .pt-big-btn:hover { transform: scale(1.06); box-shadow: 0 0 50px rgba(46,196,182,0.3); border-color: var(--hl-accent-2); }
   .pt-big-btn:active { transform: scale(0.96); }
@@ -41,7 +44,34 @@
     100% { transform: scale(1); }
   }
 
+  /* Sign button — smaller, to the left */
+  .pt-sign-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .pt-sign-btn {
+    width: 110px; height: 110px; border-radius: 50%; border: 3px solid var(--hl-warn);
+    background: linear-gradient(135deg, #2a2518 0%, #1a1810 100%);
+    color: var(--hl-warn); font-size: 36px; cursor: pointer;
+    transition: all 180ms; display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 20px rgba(255,179,71,0.1);
+  }
+  .pt-sign-btn:hover { transform: scale(1.06); box-shadow: 0 0 40px rgba(255,179,71,0.25); border-color: #ffc870; }
+  .pt-sign-btn:active { transform: scale(0.96); }
+  .pt-sign-btn.pt-logged {
+    border-color: var(--hl-ok); box-shadow: 0 0 30px rgba(112,216,132,0.3);
+    animation: pt-pop 400ms ease-out;
+  }
+
+  .pt-poop-col { display: flex; flex-direction: column; align-items: center; }
   .pt-big-label { font-size: 14px; color: var(--hl-muted); margin-top: 12px; }
+  .pt-sign-label { font-size: 12px; color: var(--hl-muted); margin-top: 6px; }
+
+  /* Active signs banner */
+  .pt-active-signs {
+    background: rgba(255,179,71,0.08); border: 1px solid rgba(255,179,71,0.3); border-radius: 8px;
+    padding: 10px 16px; margin: 12px 0; text-align: center; font-size: 13px; color: var(--hl-warn);
+    display: none;
+  }
+  .pt-active-signs.visible { display: block; }
+  .pt-active-signs strong { color: #ffc870; }
 
   /* Time adjuster */
   .pt-time-row {
@@ -132,6 +162,9 @@
     font-size: 14px;
   }
   .pt-log-item:last-child { border-bottom: none; }
+  .pt-log-item.pt-log-sign { opacity: 0.85; }
+  .pt-log-icon { margin-right: 8px; font-size: 16px; }
+  .pt-log-linked { font-size: 11px; color: var(--hl-ok); margin-left: 6px; }
   .pt-log-time { font-family: var(--hl-mono); color: var(--hl-accent); }
   .pt-log-ago { color: var(--hl-muted); font-size: 12px; margin-left: 10px; }
   .pt-log-del {
@@ -171,9 +204,25 @@
   }
 
   @media (max-width: 600px) {
-    .pt-big-btn { width: 160px; height: 160px; font-size: 52px; }
-    .pt-stats { grid-template-columns: repeat(2, 1fr); }
-    .pt-time-display { min-width: 140px; font-size: 15px; }
+    .pt-wrap { padding: 0 4px; }
+    .pt-big-btn { width: 130px; height: 130px; font-size: 44px; border-width: 3px; }
+    .pt-sign-btn { width: 80px; height: 80px; font-size: 26px; border-width: 2px; }
+    .pt-btn-row { gap: 16px; }
+    .pt-log-section { margin: 16px 0 10px; }
+    .pt-time-row { gap: 4px; margin: 10px 0 6px; }
+    .pt-time-btn { padding: 6px 8px; font-size: 12px; }
+    .pt-time-display { min-width: 110px; font-size: 14px; }
+    .pt-custom-row { gap: 6px; margin: 6px 0 16px; }
+    .pt-custom-input { padding: 6px 8px; font-size: 13px; max-width: 130px; }
+    .pt-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .pt-stat { padding: 12px 8px; }
+    .pt-stat-val { font-size: 22px; }
+    .pt-chart { padding: 10px; }
+    .pt-bar-chart { height: 90px; }
+    .pt-log-item { padding: 8px 10px; font-size: 13px; }
+    .pt-section-title { font-size: 15px; margin: 20px 0 8px; }
+    .pt-kid-tab { padding: 6px 12px; font-size: 13px; }
+    .pt-kid-add { padding: 6px 10px; font-size: 13px; }
   }
 </style>
 
@@ -184,10 +233,21 @@
   <!-- Warning banner -->
   <div class="pt-warning" id="ptWarning"></div>
 
-  <!-- Big button -->
+  <!-- Active signs -->
+  <div class="pt-active-signs" id="ptActiveSigns"></div>
+
+  <!-- Buttons: Sign (left) + Poop (right) -->
   <div class="pt-log-section">
-    <button class="pt-big-btn" id="ptBigBtn" onclick="ptLogPoop()">&#x1f4a9;</button>
-    <div class="pt-big-label" id="ptBigLabel">Tap to log a poop</div>
+    <div class="pt-btn-row">
+      <div class="pt-sign-col">
+        <button class="pt-sign-btn" id="ptSignBtn" onclick="ptLogSign()">&#x1f440;</button>
+        <div class="pt-sign-label" id="ptSignLabel">Log signs</div>
+      </div>
+      <div class="pt-poop-col">
+        <button class="pt-big-btn" id="ptBigBtn" onclick="ptLogPoop()">&#x1f4a9;</button>
+        <div class="pt-big-label" id="ptBigLabel">Tap to log a poop</div>
+      </div>
+    </div>
   </div>
 
   <!-- Time adjusters -->
@@ -236,7 +296,13 @@
     <div class="pt-chart" id="ptGapChart"></div>
   </div>
 
-  <!-- Recent log -->
+  <!-- Sign-to-poop time chart -->
+  <div class="pt-chart-section">
+    <div class="pt-chart-title">Sign-to-Poop Delay (minutes)</div>
+    <div class="pt-chart" id="ptSignDelayChart"></div>
+  </div>
+
+  <!-- Recent log (combined: poops + signs, chronological) -->
   <div class="pt-section-title">Recent Log</div>
   <div class="pt-chart">
     <div class="pt-log-list" id="ptLogList"></div>
@@ -260,8 +326,8 @@
   const API = '/poop-tracker/api';
   let kids = {{ kids | tojson }};
   let activeKid = kids.length ? kids[0].id : null;
-  let offsetMinutes = 0; // offset from now
-  let customTime = null; // if set, use this ISO string
+  let offsetMinutes = 0;
+  let customTime = null;
 
   // ── Kid tabs ──
   function renderKidTabs() {
@@ -374,25 +440,62 @@
     }
   };
 
-  // ── Delete a poop ──
+  // ── Log a sign ──
+  window.ptLogSign = async function() {
+    if (!activeKid) return;
+    const btn = document.getElementById('ptSignBtn');
+    const occurredAt = getLogTime();
+    const res = await fetch(`${API}/signs`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({kid_id: activeKid, occurred_at: occurredAt})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.classList.add('pt-logged');
+      document.getElementById('ptSignLabel').textContent = 'Logged!';
+      setTimeout(() => {
+        btn.classList.remove('pt-logged');
+        document.getElementById('ptSignLabel').textContent = 'Log signs';
+      }, 1500);
+      ptResetTime();
+      refresh();
+    }
+  };
+
+  // ── Deletes ──
   window.ptDeletePoop = async function(id) {
     const res = await fetch(`${API}/log/${id}`, {method: 'DELETE'});
     const data = await res.json();
     if (data.ok) refresh();
   };
 
+  window.ptDeleteSign = async function(id) {
+    const res = await fetch(`${API}/signs/${id}`, {method: 'DELETE'});
+    const data = await res.json();
+    if (data.ok) refresh();
+  };
+
   // ── Render stats ──
   function renderStats(stats) {
-    // Warning
     const warn = document.getElementById('ptWarning');
     if (stats.warning) {
-      warn.textContent = `\u26a0\ufe0f It's been ${stats.hours_since_last} hours since the last poop — that's longer than usual!`;
+      warn.textContent = `\u26a0\ufe0f It's been ${stats.hours_since_last} hours since the last poop \u2014 that's longer than usual!`;
       warn.classList.add('visible');
     } else {
       warn.classList.remove('visible');
     }
 
-    // Prediction
+    // Active signs
+    const activeSigns = document.getElementById('ptActiveSigns');
+    const signs = stats.signs || {};
+    if (signs.active_signs && signs.active_signs.length) {
+      const parts = signs.active_signs.map(s => `<strong>Signs</strong> ${s.mins_ago}m ago`);
+      activeSigns.innerHTML = '\ud83d\udc40 Active signs: ' + parts.join(' \u00b7 ');
+      activeSigns.classList.add('visible');
+    } else {
+      activeSigns.classList.remove('visible');
+    }
+
     const pred = document.getElementById('ptPrediction');
     if (stats.predicted_next) {
       const d = new Date(stats.predicted_next);
@@ -403,42 +506,36 @@
         const mins = Math.floor((diff % 3600000) / 60000);
         pred.innerHTML = `Next poop predicted in <strong>${hrs}h ${mins}m</strong> (${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})})`;
       } else {
-        pred.innerHTML = `Next poop was predicted at <strong>${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</strong> — could be any moment!`;
+        pred.innerHTML = `Next poop was predicted at <strong>${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</strong> \u2014 could be any moment!`;
       }
     } else {
-      pred.textContent = stats.count ? '' : 'No data yet — log some poops!';
+      pred.textContent = stats.count ? '' : 'No data yet \u2014 log some poops!';
     }
 
-    // Stat cards
     const el = document.getElementById('ptStats');
     const cards = [];
     cards.push({val: stats.count, label: 'Total Poops'});
-    cards.push({val: stats.avg_gap_hours != null ? stats.avg_gap_hours + 'h' : '—', label: 'Avg Gap'});
-    cards.push({val: stats.hours_since_last != null ? stats.hours_since_last + 'h' : '—', label: 'Since Last'});
-    cards.push({val: stats.weekly_avg != null ? stats.weekly_avg : '—', label: 'Per Week'});
+    cards.push({val: stats.avg_gap_hours != null ? stats.avg_gap_hours + 'h' : '\u2014', label: 'Avg Gap'});
+    cards.push({val: stats.hours_since_last != null ? stats.hours_since_last + 'h' : '\u2014', label: 'Since Last'});
+    cards.push({val: stats.weekly_avg != null ? stats.weekly_avg : '\u2014', label: 'Per Week'});
+    cards.push({val: signs.total || 0, label: 'Total Signs'});
+    cards.push({val: signs.avg_sign_to_poop_mins != null ? signs.avg_sign_to_poop_mins + 'm' : '\u2014', label: 'Avg Sign\u2192Poop'});
     el.innerHTML = cards.map(c =>
       `<div class="pt-stat"><div class="pt-stat-val">${c.val}</div><div class="pt-stat-label">${c.label}</div></div>`
     ).join('');
 
-    // Hourly chart
     renderBarChart('ptHourlyChart', stats.hourly_dist,
-      (v, i) => i.toString().padStart(2, '0'),
-      (v) => v
-    );
+      (v, i) => i.toString().padStart(2, '0'), (v) => v);
 
-    // Daily chart
     const dailyDates = Object.keys(stats.daily_counts);
     const dailyVals = dailyDates.map(d => stats.daily_counts[d]);
     renderBarChart('ptDailyChart', dailyVals,
-      (v, i) => dailyDates[i] ? dailyDates[i].slice(5) : '',
-      (v) => v
-    );
+      (v, i) => dailyDates[i] ? dailyDates[i].slice(5) : '', (v) => v);
 
-    // Gap chart
-    renderBarChart('ptGapChart', stats.gaps,
-      (v, i) => '',
-      (v) => v
-    );
+    renderBarChart('ptGapChart', stats.gaps, (v, i) => '', (v) => v);
+
+    renderBarChart('ptSignDelayChart', signs.sign_to_poop_times || [],
+      (v, i) => '', (v) => v);
   }
 
   function renderBarChart(elId, values, labelFn, valFn) {
@@ -461,23 +558,42 @@
       '</div>';
   }
 
-  // ── Render log ──
-  function renderLog(log) {
+  // ── Render combined log (poops + signs) ──
+  function renderLog(poops, signs) {
     const el = document.getElementById('ptLogList');
-    if (!log.length) {
-      el.innerHTML = '<div style="color:var(--hl-muted);padding:16px;text-align:center;">No poops logged yet</div>';
+    const items = [];
+    poops.forEach(p => items.push({...p, _type: 'poop'}));
+    signs.forEach(s => items.push({...s, _type: 'sign'}));
+    items.sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at));
+
+    if (!items.length) {
+      el.innerHTML = '<div style="color:var(--hl-muted);padding:16px;text-align:center;">No activity logged yet</div>';
       return;
     }
-    el.innerHTML = log.map(entry => {
+    el.innerHTML = items.slice(0, 100).map(entry => {
       const d = new Date(entry.occurred_at);
       const ago = timeAgo(d);
-      return `<div class="pt-log-item">
-        <div>
-          <span class="pt-log-time">${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
-          <span class="pt-log-ago">${ago}</span>
-        </div>
-        <button class="pt-log-del" onclick="ptDeletePoop(${entry.id})" title="Delete">&times;</button>
-      </div>`;
+      if (entry._type === 'poop') {
+        return `<div class="pt-log-item">
+          <div>
+            <span class="pt-log-icon">\ud83d\udca9</span>
+            <span class="pt-log-time">${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+            <span class="pt-log-ago">${ago}</span>
+          </div>
+          <button class="pt-log-del" onclick="ptDeletePoop(${entry.id})" title="Delete">&times;</button>
+        </div>`;
+      } else {
+        const linked = entry.poop_id ? '<span class="pt-log-linked">\u2713 linked</span>' : '';
+        return `<div class="pt-log-item pt-log-sign">
+          <div>
+            <span class="pt-log-icon">\ud83d\udc40</span>
+            <span class="pt-log-time">${d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+            ${linked}
+            <span class="pt-log-ago">${ago}</span>
+          </div>
+          <button class="pt-log-del" onclick="ptDeleteSign(${entry.id})" title="Delete">&times;</button>
+        </div>`;
+      }
     }).join('');
   }
 
@@ -501,14 +617,16 @@
   // ── Refresh data ──
   async function refresh() {
     if (!activeKid) return;
-    const [statsRes, logRes] = await Promise.all([
+    const [statsRes, logRes, signsRes] = await Promise.all([
       fetch(`${API}/stats/${activeKid}`),
-      fetch(`${API}/log/${activeKid}`)
+      fetch(`${API}/log/${activeKid}`),
+      fetch(`${API}/signs/${activeKid}`)
     ]);
     const stats = await statsRes.json();
     const log = await logRes.json();
+    const signs = await signsRes.json();
     renderStats(stats);
-    renderLog(log);
+    renderLog(log, signs);
   }
 
   // Init

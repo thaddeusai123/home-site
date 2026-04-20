@@ -55,6 +55,113 @@ def _list_kids():
         return [dict(r) for r in conn.execute("SELECT * FROM poop_kids ORDER BY id").fetchall()]
 
 
+def _log_poop(kid_id: int, occurred_at: str, notes: str = "") -> int:
+    db = _db()
+    with db.connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO poop_log (kid_id, occurred_at, logged_at, notes) VALUES (?, ?, ?, ?)",
+            (int(kid_id), occurred_at, db.now_iso(), notes),
+        )
+        poop_id = cur.lastrowid
+        # Link any unlinked signs from the last 6 hours to this poop
+        conn.execute(
+            "UPDATE poop_signs SET poop_id = ? "
+            "WHERE kid_id = ? AND poop_id IS NULL "
+            "AND occurred_at >= datetime(?, '-6 hours')",
+            (poop_id, kid_id, occurred_at),
+        )
+    return poop_id
+
+
+def _log_sign(kid_id: int, occurred_at: str, notes: str = "") -> int:
+    db = _db()
+    with db.connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO poop_signs (kid_id, sign_type, occurred_at, logged_at, notes) "
+            "VALUES (?, 'sign', ?, ?, ?)",
+            (int(kid_id), occurred_at, db.now_iso(), notes),
+        )
+    return cur.lastrowid
+
+
+def _get_signs(kid_id: int, limit: int = 200) -> list[dict]:
+    db = _db()
+    with db.connect() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM poop_signs WHERE kid_id = ? ORDER BY occurred_at DESC LIMIT ?",
+            (kid_id, limit),
+        ).fetchall()]
+
+
+def _get_sign_stats(kid_id: int) -> dict:
+    db = _db()
+    with db.connect() as conn:
+        signs = [dict(r) for r in conn.execute(
+            "SELECT * FROM poop_signs WHERE kid_id = ? ORDER BY occurred_at ASC",
+            (kid_id,),
+        ).fetchall()]
+
+    if not signs:
+        return {
+            "total": 0, "linked": 0, "unlinked": 0,
+            "avg_sign_to_poop_mins": None,
+            "sign_to_poop_times": [], "active_signs": [],
+        }
+
+    total = len(signs)
+    linked = sum(1 for s in signs if s["poop_id"])
+    unlinked = total - linked
+
+    # Sign-to-poop delay for linked signs
+    sign_to_poop_mins = []
+    db2 = _db()
+    with db2.connect() as conn:
+        for s in signs:
+            if not s["poop_id"]:
+                continue
+            poop = conn.execute(
+                "SELECT occurred_at FROM poop_log WHERE id = ?", (s["poop_id"],)
+            ).fetchone()
+            if poop:
+                try:
+                    st = datetime.fromisoformat(s["occurred_at"])
+                    pt = datetime.fromisoformat(poop["occurred_at"])
+                    if st.tzinfo is None:
+                        st = st.replace(tzinfo=timezone.utc)
+                    if pt.tzinfo is None:
+                        pt = pt.replace(tzinfo=timezone.utc)
+                    delta = (pt - st).total_seconds() / 60
+                    if delta >= 0:
+                        sign_to_poop_mins.append(round(delta, 1))
+                except Exception:
+                    pass
+
+    avg_delay = round(sum(sign_to_poop_mins) / len(sign_to_poop_mins), 1) if sign_to_poop_mins else None
+
+    # Currently active (unlinked) signs in the last 6 hours
+    now = datetime.now(timezone.utc)
+    active = []
+    for s in reversed(signs):
+        if s["poop_id"]:
+            continue
+        try:
+            st = datetime.fromisoformat(s["occurred_at"])
+            if st.tzinfo is None:
+                st = st.replace(tzinfo=timezone.utc)
+            if (now - st).total_seconds() < 6 * 3600:
+                mins_ago = round((now - st).total_seconds() / 60)
+                active.append({"mins_ago": mins_ago, "at": s["occurred_at"]})
+        except Exception:
+            pass
+
+    return {
+        "total": total, "linked": linked, "unlinked": unlinked,
+        "avg_sign_to_poop_mins": avg_delay,
+        "sign_to_poop_times": sign_to_poop_mins[-20:],
+        "active_signs": active,
+    }
+
+
 def _get_stats(kid_id: int) -> dict:
     db = _db()
     with db.connect() as conn:
@@ -63,10 +170,12 @@ def _get_stats(kid_id: int) -> dict:
             (kid_id,),
         ).fetchall()
 
+    _empty = {"count": 0, "gaps": [], "avg_gap_hours": None, "last_at": None,
+              "hours_since_last": None, "daily_counts": {}, "hourly_dist": [0]*24,
+              "predicted_next": None, "warning": False, "weekly_avg": None}
+
     if not rows:
-        return {"count": 0, "gaps": [], "avg_gap_hours": None, "last_at": None,
-                "hours_since_last": None, "daily_counts": {}, "hourly_dist": [0]*24,
-                "predicted_next": None, "warning": False, "weekly_avg": None}
+        return {**_empty, "signs": _get_sign_stats(kid_id)}
 
     times = []
     for r in rows:
@@ -79,9 +188,7 @@ def _get_stats(kid_id: int) -> dict:
             pass
 
     if not times:
-        return {"count": 0, "gaps": [], "avg_gap_hours": None, "last_at": None,
-                "hours_since_last": None, "daily_counts": {}, "hourly_dist": [0]*24,
-                "predicted_next": None, "warning": False, "weekly_avg": None}
+        return {**_empty, "signs": _get_sign_stats(kid_id)}
 
     now = datetime.now(timezone.utc)
     gaps_hours = [round((times[i] - times[i-1]).total_seconds() / 3600, 1) for i in range(1, len(times))]
@@ -106,12 +213,15 @@ def _get_stats(kid_id: int) -> dict:
     else:
         weekly_avg = round(len(times) * 7, 1) if daily_counts else None
 
+    sign_stats = _get_sign_stats(kid_id)
+
     return {
         "count": len(times), "gaps": gaps_hours[-20:], "avg_gap_hours": avg_gap,
         "last_at": last.isoformat(timespec="minutes"), "hours_since_last": hours_since,
         "daily_counts": dict(sorted(daily_counts.items())[-30:]),
         "hourly_dist": hourly_dist, "predicted_next": predicted_next,
         "warning": warning, "weekly_avg": weekly_avg,
+        "signs": sign_stats,
     }
 
 
@@ -165,12 +275,8 @@ def api_log_poop():
         return jsonify({"error": "kid_id is required"}), 400
     occurred_at = data.get("occurred_at") or db.now_iso()
     notes = (data.get("notes") or "").strip()
-    with db.connect() as conn:
-        cur = conn.execute(
-            "INSERT INTO poop_log (kid_id, occurred_at, logged_at, notes) VALUES (?, ?, ?, ?)",
-            (int(kid_id), occurred_at, db.now_iso(), notes),
-        )
-    return jsonify({"ok": True, "id": cur.lastrowid})
+    poop_id = _log_poop(int(kid_id), occurred_at, notes)
+    return jsonify({"ok": True, "id": poop_id})
 
 
 @bp.route("/api/log/<int:poop_id>", methods=["DELETE"])
@@ -196,3 +302,36 @@ def api_get_log(kid_id):
 @bp.route("/api/stats/<int:kid_id>", methods=["GET"])
 def api_get_stats(kid_id):
     return jsonify(_get_stats(kid_id))
+
+
+@bp.route("/api/signs", methods=["POST"])
+def api_log_sign():
+    db = _db()
+    data = request.get_json(force=True)
+    kid_id = data.get("kid_id")
+    if not kid_id:
+        return jsonify({"error": "kid_id is required"}), 400
+    occurred_at = data.get("occurred_at") or db.now_iso()
+    notes = (data.get("notes") or "").strip()
+    sign_id = _log_sign(int(kid_id), occurred_at, notes)
+    return jsonify({"ok": True, "id": sign_id})
+
+
+@bp.route("/api/signs/<int:sign_id>", methods=["DELETE"])
+def api_delete_sign(sign_id):
+    db = _db()
+    with db.connect() as conn:
+        conn.execute("DELETE FROM poop_signs WHERE id = ?", (sign_id,))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/signs/<int:kid_id>", methods=["GET"])
+def api_get_signs(kid_id):
+    db = _db()
+    limit = request.args.get("limit", 200, type=int)
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM poop_signs WHERE kid_id = ? ORDER BY occurred_at DESC LIMIT ?",
+            (kid_id, limit),
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])

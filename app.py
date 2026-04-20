@@ -80,8 +80,19 @@ def init_db():
                 logged_at   TEXT NOT NULL,
                 notes       TEXT DEFAULT ''
             );
+            CREATE TABLE IF NOT EXISTS poop_signs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                kid_id      INTEGER NOT NULL REFERENCES poop_kids(id) ON DELETE CASCADE,
+                sign_type   TEXT NOT NULL DEFAULT 'sign',
+                occurred_at TEXT NOT NULL,
+                logged_at   TEXT NOT NULL,
+                poop_id     INTEGER REFERENCES poop_log(id) ON DELETE SET NULL,
+                notes       TEXT DEFAULT ''
+            );
             CREATE INDEX IF NOT EXISTS idx_poop_log_kid ON poop_log(kid_id);
             CREATE INDEX IF NOT EXISTS idx_poop_log_occurred ON poop_log(occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_poop_signs_kid ON poop_signs(kid_id);
+            CREATE INDEX IF NOT EXISTS idx_poop_signs_occurred ON poop_signs(occurred_at);
         """)
 
 
@@ -141,6 +152,26 @@ def healthz():
         "port": APP_PORT,
         "registered_apps": [a["slug"] for a in _registered_apps],
     })
+
+
+@app.route("/api/system/restart", methods=["POST"])
+def api_system_restart():
+    """Restart the Home Website service via systemctl."""
+    import subprocess
+    confirm = (request.form.get("confirm") or "").strip().lower()
+    if confirm not in {"1", "true", "yes", "on", "confirm"}:
+        return jsonify({"error": "confirmation required: pass confirm=true"}), 400
+    try:
+        subprocess.Popen(
+            ["sudo", "systemctl", "restart", "home-site"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as e:
+        return jsonify({"error": f"restart failed: {e}"}), 500
+    return jsonify({"ok": True, "detail": "restart scheduled"})
 
 
 @app.errorhandler(404)
