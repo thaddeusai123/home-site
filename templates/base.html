@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %} · Home Website</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -36,6 +37,11 @@
           </a>
         {% endfor %}
       </nav>
+      <div class="hs-sidebar-footer">
+        <button type="button" onclick="copyPromptPrimer(this)" class="hs-primer-btn" title="Copy AI prompt primer to clipboard">
+          📋 AI Prompt Primer
+        </button>
+      </div>
     </aside>
 
     <div class="hs-content">
@@ -80,6 +86,86 @@
     var links = sidebar ? sidebar.querySelectorAll('a') : [];
     links.forEach(function(a) { a.addEventListener('click', close); });
   })();
+
+  {% raw %}
+  // ── AI Prompt Primer ────────────────────────────────────────────────
+  function copyPromptPrimer(btn) {
+    var primer = [
+      '# Home Website — AI Prompt Primer',
+      '',
+      '## What this app is',
+      'The Home Website is a Flask web application (Python) running on a Raspberry Pi.',
+      'It hosts personal tools and mini-apps for household use.',
+      'Default port 8080, reverse-proxied via nginx on ports 80/443.',
+      '',
+      '## Repo location',
+      '`/Users/thaddeus/.openclaw/workspace/home-site/`',
+      '',
+      '## Tech stack',
+      '- **Backend:** Flask + Waitress (WSGI server, 8 threads)',
+      '- **Frontend:** Jinja2 templates, custom CSS (teal/slate theme), vanilla JS — no bundler, no npm',
+      '- **Database:** SQLite (`homesite.db`) — orchard_layouts, poop_kids, poop_log, poop_signs tables',
+      '- **Deploy:** systemd service `home-site`, nginx reverse proxy',
+      '',
+      '## Key files',
+      '| File | Purpose |',
+      '|------|---------|',
+      '| `app.py` | Flask app — blueprint registration, DB init, core routes, restart endpoint |',
+      '| `apps/orchard_planner/__init__.py` | Orchard Planner blueprint — interactive orchard layout tool |',
+      '| `apps/poop_tracker/__init__.py` | Poop Tracker blueprint — bowel movement logging & predictions |',
+      '| `templates/base.html` | Shared layout — sidebar nav, mobile hamburger menu |',
+      '| `templates/landing.html` | Landing page with app tiles |',
+      '| `templates/orchard_planner/planner.html` | Orchard planner UI |',
+      '| `templates/poop_tracker/index.html` | Poop tracker UI |',
+      '| `static/style.css` | Teal/slate theme stylesheet |',
+      '| `start.sh` | Launcher script (sets up venv, starts Waitress) |',
+      '| `wsgi.py` | WSGI entry point |',
+      '',
+      '## Blueprints registered in app.py',
+      '- `orchard_planner` (prefix: `/orchard-planner`) — interactive top-down apple orchard layout planner',
+      '- `poop_tracker` (prefix: `/poop-tracker`) — bowel movement logging, sign tracking, statistical predictions',
+      '',
+      '## Key routes (app.py)',
+      '- `/` — Landing page with app tiles',
+      '- `/healthz` — JSON health check',
+      '- `/api/system/restart` — Restart the service (POST, confirm-gated)',
+      '',
+      '## Style conventions',
+      '- Dark theme: teal (#2ec4b6) accents, slate background',
+      '- Custom CSS (`style.css`) — no Tailwind, no CDN frameworks',
+      '- Templates extend `base.html` with `{% block content %}`',
+      '- No npm, no node_modules, no bundler',
+      '',
+      '## Important constraints',
+      '- Blueprint pattern: each app exports `bp` and `APP_META` dict',
+      '- Database is self-contained (`homesite.db`)',
+      '',
+      '---',
+      '_Paste this at the start of a session so the AI has full context of the Home Website app._'
+    ].join('\n');
+    function onCopied() {
+      var orig = btn.innerHTML;
+      btn.textContent = '\u2713 Copied!';
+      btn.style.color = '#34d399';
+      setTimeout(function() { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(primer).then(onCopied).catch(function() { _fallbackCopy(primer, onCopied); });
+    } else {
+      _fallbackCopy(primer, onCopied);
+    }
+  }
+  function _fallbackCopy(text, cb) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    cb();
+  }
+  {% endraw %}
   </script>
 </body>
 </html>
