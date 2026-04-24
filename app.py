@@ -25,6 +25,7 @@ APPS = [
     "apps.orchard_planner",
     "apps.poop_tracker",
     "apps.nutrient_calc",
+    "apps.gpio_lab",
 ]
 
 app = Flask(__name__)
@@ -99,6 +100,11 @@ def init_db():
                 name        TEXT NOT NULL UNIQUE,
                 data        TEXT NOT NULL,
                 created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS gpio_labels (
+                pin         INTEGER PRIMARY KEY,
+                label       TEXT NOT NULL,
                 updated_at  TEXT NOT NULL
             );
         """)

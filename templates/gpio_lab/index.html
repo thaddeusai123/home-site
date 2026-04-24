@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+{% block title %}GPIO Lab{% endblock %}
+{% block content %}
+<style>
+  .gl-wrap { max-width: 1100px; margin: 0 auto; }
+  .gl-section-title { margin: 0 0 10px; font-size: 13px; color: var(--hl-accent); letter-spacing: 0.8px; text-transform: uppercase; font-weight: 700; }
+
+  .gl-banner {
+    margin-top: 10px; padding: 10px 12px; border-radius: 6px;
+    font-size: 13px; border: 1px solid var(--hl-border);
+  }
+  .gl-banner.err  { background: rgba(227,100,91,0.10); border-color: var(--hl-danger); color: #f1a39d; }
+  .gl-banner.ok   { background: rgba(112,216,132,0.08); border-color: var(--hl-ok); color: #b3e6bf; }
+
+  /* ── Control panel ──────────────────────── */
+  .gl-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .gl-field { display: flex; flex-direction: column; gap: 4px; }
+  .gl-field-label { font-size: 11px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  .gl-input, .gl-select {
+    background: var(--hl-bg-alt); color: var(--hl-text);
+    border: 1px solid var(--hl-border); border-radius: 6px;
+    padding: 7px 10px; font-size: 14px; font-family: inherit;
+    min-width: 0;
+  }
+  .gl-input:focus, .gl-select:focus { outline: none; border-color: var(--hl-accent); box-shadow: 0 0 0 3px rgba(46,196,182,0.12); }
+
+  .gl-seg { display: inline-flex; border: 1px solid var(--hl-border); border-radius: 6px; overflow: hidden; }
+  .gl-seg button {
+    padding: 7px 14px; background: transparent; color: var(--hl-text);
+    border: none; cursor: pointer; font-size: 13px; font-family: inherit;
+    border-right: 1px solid var(--hl-border);
+  }
+  .gl-seg button:last-child { border-right: none; }
+  .gl-seg button.active { background: rgba(46,196,182,0.18); color: var(--hl-accent); font-weight: 600; }
+
+  .gl-slider-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .gl-slider-head .gl-val { font-family: var(--hl-mono); color: var(--hl-accent); font-size: 13px; }
+  .gl-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 6px; border-radius: 3px;
+    background: linear-gradient(90deg, var(--hl-accent) 0%, var(--hl-accent) var(--gl-fill, 50%), var(--hl-panel-alt) var(--gl-fill, 50%), var(--hl-panel-alt) 100%);
+    outline: none; margin: 4px 0 0; cursor: pointer;
+  }
+  .gl-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--hl-accent); cursor: pointer; border: 3px solid var(--hl-bg);
+    box-shadow: 0 0 0 2px var(--hl-accent);
+  }
+  .gl-slider::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--hl-accent); cursor: pointer; border: 3px solid var(--hl-bg);
+    box-shadow: 0 0 0 2px var(--hl-accent);
+  }
+
+  .gl-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .gl-btn {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--hl-border);
+    background: var(--hl-panel); color: var(--hl-text); cursor: pointer;
+    font-size: 13px; font-family: inherit; font-weight: 500;
+  }
+  .gl-btn:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
+  .gl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .gl-btn-primary {
+    background: rgba(46,196,182,0.14); border-color: var(--hl-accent); color: var(--hl-accent); font-weight: 600;
+  }
+  .gl-btn-primary:hover { background: rgba(46,196,182,0.22); }
+  .gl-btn-danger { border-color: var(--hl-border); color: var(--hl-danger); }
+  .gl-btn-danger:hover { border-color: var(--hl-danger); }
+
+  .gl-status { font-size: 12px; color: var(--hl-muted); min-height: 16px; margin-top: 8px; }
+  .gl-status.err { color: var(--hl-danger); }
+  .gl-status.ok  { color: var(--hl-ok); }
+
+  /* ── Pin grid ───────────────────────────── */
+  .gl-pins {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px;
+  }
+  .gl-pin {
+    padding: 10px 12px; border-radius: 8px; background: var(--hl-bg-alt);
+    border: 1px solid var(--hl-border); display: flex; flex-direction: column; gap: 8px;
+    transition: border-color 120ms, box-shadow 120ms;
+  }
+  .gl-pin.selected { border-color: var(--hl-accent); box-shadow: 0 0 0 2px rgba(46,196,182,0.12); }
+  .gl-pin.state-high { border-left: 4px solid var(--hl-ok); padding-left: 9px; }
+  .gl-pin.state-low  { border-left: 4px solid var(--hl-danger); padding-left: 9px; }
+  .gl-pin.state-none { border-left: 4px solid var(--hl-panel-alt); padding-left: 9px; }
+  .gl-pin.special { background: linear-gradient(180deg, var(--hl-bg-alt) 0%, rgba(255,179,71,0.04) 100%); }
+
+  .gl-pin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+  .gl-pin-bcm  { font-family: var(--hl-mono); font-size: 18px; font-weight: 700; color: var(--hl-text); }
+  .gl-pin-phys { font-family: var(--hl-mono); font-size: 11px; color: var(--hl-muted); }
+  .gl-pin-special { font-size: 10px; color: var(--hl-warn); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
+  .gl-pin-label-row { display: flex; gap: 4px; align-items: center; }
+  .gl-pin-label-row input {
+    flex: 1; min-width: 0;
+    background: var(--hl-panel); color: var(--hl-text);
+    border: 1px solid var(--hl-border); border-radius: 5px;
+    padding: 4px 8px; font-size: 12px; font-family: inherit;
+  }
+  .gl-pin-label-row input:focus { outline: none; border-color: var(--hl-accent); }
+
+  .gl-pin-state {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--hl-mono); font-size: 11px; color: var(--hl-muted);
+  }
+  .gl-pin-state .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hl-panel-alt); }
+  .gl-pin.state-high .gl-pin-state .dot { background: var(--hl-ok); box-shadow: 0 0 6px var(--hl-ok); }
+  .gl-pin.state-low  .gl-pin-state .dot { background: var(--hl-danger); }
+  .gl-pin.state-high .gl-pin-state { color: var(--hl-ok); }
+  .gl-pin.state-low  .gl-pin-state { color: var(--hl-danger); }
+
+  .gl-pin-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .gl-pin-btns button {
+    padding: 5px 4px; border-radius: 5px; border: 1px solid var(--hl-border);
+    background: var(--hl-panel); color: var(--hl-text); cursor: pointer;
+    font-size: 11px; font-family: inherit;
+  }
+  .gl-pin-btns button:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
+  .gl-pin-btns .gl-fire {
+    grid-column: 1 / -1;
+    background: rgba(46,196,182,0.14); border-color: var(--hl-accent); color: var(--hl-accent); font-weight: 600;
+  }
+  .gl-pin-btns .gl-fire:hover { background: rgba(46,196,182,0.24); }
+  .gl-pin-btns .gl-fire.firing {
+    background: var(--hl-warn); color: var(--hl-bg); border-color: var(--hl-warn);
+  }
+
+  .gl-sweep-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--hl-muted); }
+  .gl-sweep-row label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .gl-sweep-row input[type="checkbox"] { accent-color: var(--hl-accent); }
+
+  .gl-tip {
+    background: rgba(255,179,71,0.06); border-left: 3px solid var(--hl-warn);
+    padding: 8px 12px; border-radius: 4px; font-size: 12px; color: var(--hl-muted);
+    margin-top: 10px; line-height: 1.5;
+  }
+  .gl-tip strong { color: var(--hl-warn); }
+</style>
+
+<div class="gl-wrap">
+  <div class="hs-card" style="margin-bottom:16px;">
+    <h2 style="margin:0 0 4px;">⚡ GPIO Lab</h2>
+    <p class="hs-muted" style="margin:0; font-size:13px;">
+      Probe your Raspberry Pi's GPIO pins to figure out which ones fire each relay.
+      Most relay HATs are <strong>active-low</strong> — a brief LOW pulse on the right pin clicks the relay.
+      Some boards are active-high. Try LOW first; if nothing clicks, switch to HIGH.
+    </p>
+    <div id="glBanner"></div>
+  </div>
+
+  <!-- ── Control panel ──────────────────────────────── -->
+  <div class="hs-card" style="margin-bottom: 16px;">
+    <h3 class="gl-section-title">Relay probe settings</h3>
+    <div class="gl-panel">
+      <div class="gl-field">
+        <span class="gl-field-label" title="Level the pin is driven to during a pulse. Use LOW for active-low relays (most common), HIGH for active-high relays.">Fire level</span>
+        <div class="gl-seg" id="glFireSeg">
+          <button type="button" data-val="low" class="active">LOW</button>
+          <button type="button" data-val="high">HIGH</button>
+        </div>
+      </div>
+
+      <div class="gl-field">
+        <div class="gl-slider-head">
+          <span class="gl-field-label" title="How long the pin is held at the fire level.">Pulse duration</span>
+          <span class="gl-val" id="glDurationVal">500 ms</span>
+        </div>
+        <input type="range" id="glDuration" class="gl-slider" min="50" max="2000" step="10" value="500">
+      </div>
+
+      <div class="gl-field">
+        <div class="gl-slider-head">
+          <span class="gl-field-label" title="Pause between pulses during a sweep — long enough to hear the relay click before the next pin fires.">Sweep gap</span>
+          <span class="gl-val" id="glGapVal">400 ms</span>
+        </div>
+        <input type="range" id="glGap" class="gl-slider" min="0" max="2000" step="10" value="400">
+      </div>
+    </div>
+
+    <div class="gl-actions">
+      <button type="button" class="gl-btn gl-btn-primary" id="glSweepAll" title="Fire every GPIO pin one at a time. Listen for 4 clicks and note the pin numbers.">▶ Sweep all pins</button>
+      <button type="button" class="gl-btn" id="glSweepSelected" title="Fire only the pins you ticked below.">▶ Sweep selected</button>
+      <button type="button" class="gl-btn" id="glSelectNone" title="Clear the sweep-selection checkboxes.">Clear selection</button>
+      <span style="flex:1;"></span>
+      <button type="button" class="gl-btn gl-btn-danger" id="glReleaseAll" title="Release all pins claimed by this session. The kernel's default state takes over.">⏻ Release all</button>
+      <button type="button" class="gl-btn" id="glRefresh" title="Re-fetch pin state from the server.">↻ Refresh</button>
+    </div>
+    <div class="gl-status" id="glStatus">Ready.</div>
+
+    <div class="gl-tip">
+      <strong>Workflow:</strong> click <em>Sweep all pins</em> and count the clicks. Each click means that pin is wired to a relay.
+      Use the <em>label</em> field on each pin to name it once identified (e.g. "Pump 1"). Labels persist.
+    </div>
+  </div>
+
+  <!-- ── Pin grid ──────────────────────────────────── -->
+  <div class="hs-card">
+    <h3 class="gl-section-title">GPIO pins (BCM numbering)</h3>
+    <div id="glPins" class="gl-pins"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const banner = $('glBanner');
+  const statusEl = $('glStatus');
+  const pinsEl = $('glPins');
+
+  let fireState = 'low';     // 'low' | 'high'
+  let durationMs = 500;
+  let gapMs = 400;
+  let pinsData = [];         // [{pin, physical, special, label, state, claimed}]
+  const selected = new Set();  // pins checked for "sweep selected"
+
+  // ── UI primitives ─────────────────────────────────────
+  function paintSlider(el) {
+    const min = parseFloat(el.min), max = parseFloat(el.max), val = parseFloat(el.value);
+    const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+    el.style.setProperty('--gl-fill', pct + '%');
+  }
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || '';
+    statusEl.className = 'gl-status' + (kind ? ' ' + kind : '');
+  }
+  function setBanner(msg, kind) {
+    if (!msg) { banner.style.display = 'none'; banner.textContent = ''; return; }
+    banner.style.display = 'block';
+    banner.className = 'gl-banner ' + (kind || '');
+    banner.textContent = msg;
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ── Fetch helpers ─────────────────────────────────────
+  async function jsonFetch(url, opts = {}) {
+    const res = await fetch(url, Object.assign({
+      method: opts.method || 'GET',
+      headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+      cache: 'no-store',
+    }, opts));
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.error) throw new Error(j.error || ('HTTP ' + res.status));
+    return j;
+  }
+
+  // ── Render ────────────────────────────────────────────
+  function stateClass(st) {
+    if (st === true) return 'state-high';
+    if (st === false) return 'state-low';
+    return 'state-none';
+  }
+  function stateText(st, claimed) {
+    if (!claimed) return 'unclaimed';
+    if (st === true) return 'HIGH';
+    if (st === false) return 'LOW';
+    return '—';
+  }
+
+  function render() {
+    pinsEl.innerHTML = pinsData.map(p => {
+      const cls = ['gl-pin', stateClass(p.state)];
+      if (p.special) cls.push('special');
+      if (selected.has(p.pin)) cls.push('selected');
+      const specialTag = p.special ? '<span class="gl-pin-special" title="Pin has a secondary hardware function. Safe to use as plain GPIO as long as the function isn\'t also in use.">' + escapeHtml(p.special) + '</span>' : '';
+      return '' +
+        '<div class="' + cls.join(' ') + '" data-pin="' + p.pin + '">' +
+          '<div class="gl-pin-head">' +
+            '<span class="gl-pin-bcm" title="BCM GPIO number (what you pass to gpiozero / RPi.GPIO).">GPIO ' + p.pin + '</span>' +
+            '<span class="gl-pin-phys" title="Physical pin position on the 40-pin header.">pin ' + p.physical + '</span>' +
+          '</div>' +
+          (specialTag ? '<div>' + specialTag + '</div>' : '') +
+          '<div class="gl-pin-label-row">' +
+            '<input type="text" class="gl-pin-label" value="' + escapeHtml(p.label || '') + '" placeholder="label (e.g. Pump 1)" maxlength="40" title="Persistent label — name the pin once you identify which relay it fires.">' +
+          '</div>' +
+          '<div class="gl-sweep-row">' +
+            '<label title="Include this pin in the &quot;Sweep selected&quot; action."><input type="checkbox" class="gl-pin-check"' + (selected.has(p.pin) ? ' checked' : '') + '> sweep</label>' +
+            '<span class="gl-pin-state" title="Current pin level as driven by this session. &quot;unclaimed&quot; means the server hasn\'t touched this pin."><span class="dot"></span>' + stateText(p.state, p.claimed) + '</span>' +
+          '</div>' +
+          '<div class="gl-pin-btns">' +
+            '<button type="button" class="gl-fire" title="Fire a single pulse at the configured level & duration. Use this to test an individual relay.">▶ Fire pulse</button>' +
+            '<button type="button" class="gl-set-high" title="Drive this pin HIGH and hold it there.">HIGH</button>' +
+            '<button type="button" class="gl-set-low" title="Drive this pin LOW and hold it there.">LOW</button>' +
+            '<button type="button" class="gl-release" style="grid-column:1/-1;" title="Release this pin — stop driving it and let the kernel default take over.">⏻ release</button>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  pinsEl.addEventListener('click', async (e) => {
+    const tile = e.target.closest('.gl-pin');
+    if (!tile) return;
+    const pin = parseInt(tile.dataset.pin, 10);
+    const btn = e.target.closest('button');
+
+    if (e.target.classList.contains('gl-pin-check')) {
+      if (e.target.checked) selected.add(pin); else selected.delete(pin);
+      tile.classList.toggle('selected', e.target.checked);
+      return;
+    }
+    if (!btn) return;
+
+    if (btn.classList.contains('gl-fire')) {
+      btn.classList.add('firing');
+      btn.disabled = true;
+      setStatus('Pulsing GPIO ' + pin + '…');
+      try {
+        await jsonFetch('/gpio-lab/api/pins/' + pin + '/pulse', {
+          method: 'POST',
+          body: JSON.stringify({ fire_state: fireState, duration_ms: durationMs }),
+        });
+        setStatus('Pulsed GPIO ' + pin + ' (' + fireState.toUpperCase() + ' for ' + durationMs + ' ms). Did a relay click?', 'ok');
+      } catch (err) {
+        setStatus('Pulse failed on GPIO ' + pin + ': ' + err.message, 'err');
+      } finally {
+        btn.classList.remove('firing');
+        btn.disabled = false;
+        await refresh();
+      }
+    } else if (btn.classList.contains('gl-set-high')) {
+      await setPin(pin, 'high');
+    } else if (btn.classList.contains('gl-set-low')) {
+      await setPin(pin, 'low');
+    } else if (btn.classList.contains('gl-release')) {
+      await releasePin(pin);
+    }
+  });
+
+  pinsEl.addEventListener('change', async (e) => {
+    if (!e.target.classList.contains('gl-pin-label')) return;
+    const tile = e.target.closest('.gl-pin');
+    const pin = parseInt(tile.dataset.pin, 10);
+    const label = e.target.value.trim();
+    try {
+      await jsonFetch('/gpio-lab/api/pins/' + pin + '/label', {
+        method: 'POST',
+        body: JSON.stringify({ label }),
+      });
+      setStatus(label ? ('Labeled GPIO ' + pin + ' "' + label + '".') : ('Cleared label on GPIO ' + pin + '.'), 'ok');
+      const p = pinsData.find(x => x.pin === pin);
+      if (p) p.label = label;
+    } catch (err) {
+      setStatus('Label save failed on GPIO ' + pin + ': ' + err.message, 'err');
+    }
+  });
+
+  async function setPin(pin, state) {
+    setStatus('Setting GPIO ' + pin + ' ' + state.toUpperCase() + '…');
+    try {
+      await jsonFetch('/gpio-lab/api/pins/' + pin + '/set', {
+        method: 'POST',
+        body: JSON.stringify({ state }),
+      });
+      setStatus('GPIO ' + pin + ' → ' + state.toUpperCase() + '.', 'ok');
+    } catch (err) {
+      setStatus('Set failed on GPIO ' + pin + ': ' + err.message, 'err');
+    }
+    await refresh();
+  }
+
+  async function releasePin(pin) {
+    setStatus('Releasing GPIO ' + pin + '…');
+    try {
+      await jsonFetch('/gpio-lab/api/pins/' + pin + '/release', { method: 'POST' });
+      setStatus('Released GPIO ' + pin + '.', 'ok');
+    } catch (err) {
+      setStatus('Release failed on GPIO ' + pin + ': ' + err.message, 'err');
+    }
+    await refresh();
+  }
+
+  // ── Sweep ─────────────────────────────────────────────
+  async function doSweep(pinList) {
+    if (!pinList.length) { setStatus('No pins selected for sweep.', 'err'); return; }
+    const sweepMsEstimate = pinList.length * (durationMs + gapMs);
+    setStatus('Sweeping ' + pinList.length + ' pin' + (pinList.length === 1 ? '' : 's') +
+              ' (~' + (sweepMsEstimate / 1000).toFixed(1) + 's)…');
+    $('glSweepAll').disabled = true;
+    $('glSweepSelected').disabled = true;
+    try {
+      const j = await jsonFetch('/gpio-lab/api/sweep', {
+        method: 'POST',
+        body: JSON.stringify({
+          pins: pinList,
+          fire_state: fireState,
+          duration_ms: durationMs,
+          gap_ms: gapMs,
+        }),
+      });
+      const okCount = j.sequence.filter(s => s.ok).length;
+      const errs = j.sequence.filter(s => !s.ok);
+      let msg = 'Swept ' + okCount + '/' + j.sequence.length + ' pins (' + fireState.toUpperCase() + ', ' + durationMs + ' ms each).';
+      if (errs.length) msg += ' Errors: ' + errs.map(e => 'GPIO ' + e.pin + ' (' + e.error + ')').join(', ');
+      setStatus(msg, errs.length ? 'err' : 'ok');
+    } catch (err) {
+      setStatus('Sweep failed: ' + err.message, 'err');
+    } finally {
+      $('glSweepAll').disabled = false;
+      $('glSweepSelected').disabled = false;
+      await refresh();
+    }
+  }
+
+  $('glSweepAll').addEventListener('click', () => {
+    doSweep(pinsData.map(p => p.pin));
+  });
+  $('glSweepSelected').addEventListener('click', () => {
+    doSweep(Array.from(selected).sort((a, b) => a - b));
+  });
+  $('glSelectNone').addEventListener('click', () => {
+    selected.clear();
+    render();
+  });
+  $('glReleaseAll').addEventListener('click', async () => {
+    if (!confirm('Release all claimed GPIO pins? Any actively-held state will be dropped.')) return;
+    setStatus('Releasing all pins…');
+    try {
+      await jsonFetch('/gpio-lab/api/release-all', { method: 'POST' });
+      setStatus('All pins released.', 'ok');
+    } catch (err) {
+      setStatus('Release-all failed: ' + err.message, 'err');
+    }
+    await refresh();
+  });
+  $('glRefresh').addEventListener('click', refresh);
+
+  // ── Control wiring ────────────────────────────────────
+  document.querySelectorAll('#glFireSeg button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#glFireSeg button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      fireState = b.dataset.val;
+    });
+  });
+  function bindSlider(id, labelId, unit, onChange) {
+    const s = $(id), l = $(labelId);
+    function upd() {
+      paintSlider(s);
+      l.textContent = s.value + ' ' + unit;
+      onChange(parseInt(s.value, 10));
+    }
+    s.addEventListener('input', upd);
+    upd();
+  }
+  bindSlider('glDuration', 'glDurationVal', 'ms', v => { durationMs = v; });
+  bindSlider('glGap', 'glGapVal', 'ms', v => { gapMs = v; });
+
+  // ── Refresh ───────────────────────────────────────────
+  async function refresh() {
+    try {
+      const j = await jsonFetch('/gpio-lab/api/pins');
+      pinsData = j.pins;
+      if (!j.gpio_available) {
+        setBanner('GPIO library unavailable — UI is rendered but hardware calls will fail. ' + (j.gpio_error || ''), 'err');
+      } else {
+        setBanner('', '');
+      }
+      render();
+    } catch (err) {
+      setBanner('Could not load pin state: ' + err.message, 'err');
+    }
+  }
+
+  refresh();
+})();
+</script>
+{% endblock %}
