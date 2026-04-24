@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+{% block title %}Nutrient Calculator{% endblock %}
+{% block content %}
+<style>
+  .nc-wrap { max-width: 960px; margin: 0 auto; }
+  .nc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 780px) { .nc-grid { grid-template-columns: 1fr; } }
+
+  .nc-section-title { margin: 0 0 12px; font-size: 16px; color: var(--hl-accent); letter-spacing: 0.5px; text-transform: uppercase; }
+  .nc-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .nc-row label { flex: 1 1 160px; color: var(--hl-muted); font-size: 13px; }
+  .nc-input, .nc-select {
+    background: var(--hl-bg-alt); color: var(--hl-text);
+    border: 1px solid var(--hl-border); border-radius: 6px;
+    padding: 7px 10px; font-size: 14px; font-family: inherit;
+    min-width: 80px;
+  }
+  .nc-input:focus, .nc-select:focus { outline: none; border-color: var(--hl-accent); }
+  .nc-input.nc-num { width: 90px; text-align: right; font-family: var(--hl-mono); }
+  .nc-input.nc-short { width: 70px; text-align: right; font-family: var(--hl-mono); }
+
+  .nc-comp { padding: 12px; border: 1px solid var(--hl-border); border-radius: 8px; margin-bottom: 12px; background: var(--hl-bg-alt); }
+  .nc-comp h4 { margin: 0 0 8px; font-size: 14px; color: var(--hl-accent-2); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .nc-comp-amount { font-family: var(--hl-mono); font-size: 16px; color: var(--hl-text); font-weight: 600; }
+  .nc-comp-subrow { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--hl-muted); align-items: center; margin-top: 4px; }
+  .nc-comp-subrow .nc-input { font-size: 12px; padding: 4px 6px; }
+
+  .nc-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 8px; }
+  .nc-result-tile {
+    padding: 10px 12px; border-radius: 8px; background: var(--hl-panel);
+    border: 1px solid var(--hl-border); text-align: center;
+  }
+  .nc-result-label { font-size: 11px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .nc-result-val { font-family: var(--hl-mono); font-size: 20px; color: var(--hl-accent); font-weight: 600; margin-top: 2px; }
+  .nc-result-sub { font-size: 10px; color: var(--hl-muted); margin-top: 1px; }
+
+  .nc-btn {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid var(--hl-border);
+    background: var(--hl-panel); color: var(--hl-text); cursor: pointer; font-size: 13px;
+  }
+  .nc-btn:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
+
+  .nc-note { font-size: 12px; color: var(--hl-muted); margin-top: 10px; line-height: 1.5; }
+  .nc-note strong { color: var(--hl-warn); }
+  .nc-order { background: rgba(46,196,182,0.06); border-left: 3px solid var(--hl-accent); padding: 10px 14px; border-radius: 4px; font-size: 13px; }
+  .nc-order ol { margin: 6px 0 0 20px; padding: 0; }
+  .nc-order li { margin-bottom: 2px; }
+</style>
+
+<div class="nc-wrap">
+  <div class="hs-card" style="margin-bottom: 20px;">
+    <h2>🧪 Nutrient Calculator</h2>
+    <p class="hs-muted" style="margin:0;">Mix Masterblend 4-18-38, Calcium Nitrate, and Epsom Salt. Every field is editable — change any value and the results update instantly.</p>
+  </div>
+
+  <div class="nc-grid">
+    <!-- ── Left: Inputs ──────────────────────────────────── -->
+    <div class="hs-card">
+      <h3 class="nc-section-title">Water &amp; Units</h3>
+
+      <div class="nc-row">
+        <label>Water volume</label>
+        <input type="number" class="nc-input nc-num" id="waterVol" value="5" min="0" step="any">
+        <select class="nc-select" id="waterUnit">
+          <option value="gal">gallons</option>
+          <option value="L" selected>liters</option>
+          <option value="mL">milliliters</option>
+          <option value="floz">fl oz</option>
+          <option value="qt">quarts</option>
+        </select>
+      </div>
+
+      <div class="nc-row">
+        <label>Output mass unit</label>
+        <select class="nc-select" id="massUnit">
+          <option value="g" selected>grams</option>
+          <option value="mg">milligrams</option>
+          <option value="kg">kilograms</option>
+          <option value="oz">ounces</option>
+          <option value="lb">pounds</option>
+        </select>
+      </div>
+
+      <div class="nc-row">
+        <label>Strength (%)</label>
+        <input type="number" class="nc-input nc-num" id="strength" value="100" min="0" step="any">
+        <span class="hs-muted" style="font-size:12px;">100% = full dose</span>
+      </div>
+
+      <h3 class="nc-section-title" style="margin-top: 18px;">Components</h3>
+      <div class="hs-muted" style="font-size: 12px; margin-bottom: 8px;">
+        Dose is mass per 1 unit of water volume. Defaults: standard Masterblend "Tomato" formula (2.4-2.4-1.2 g/gal).
+        <button type="button" class="nc-btn" id="btnPresetStandard" style="margin-left:4px; font-size:11px;">Load defaults</button>
+      </div>
+
+      <!-- Masterblend -->
+      <div class="nc-comp">
+        <h4>
+          <span>Masterblend 4-18-38</span>
+          <span class="nc-comp-amount" id="outMB">—</span>
+        </h4>
+        <div class="nc-comp-subrow">
+          <span>Dose:</span>
+          <input type="number" class="nc-input nc-short" id="doseMB" value="0.634" step="any" min="0">
+          <span id="doseUnitMB">g / L</span>
+        </div>
+        <div class="nc-comp-subrow">
+          <span>%N</span>  <input type="number" class="nc-input nc-short" id="mbN"  value="4"  step="any" min="0">
+          <span>%P₂O₅</span><input type="number" class="nc-input nc-short" id="mbP" value="18" step="any" min="0">
+          <span>%K₂O</span> <input type="number" class="nc-input nc-short" id="mbK" value="38" step="any" min="0">
+        </div>
+      </div>
+
+      <!-- Epsom -->
+      <div class="nc-comp">
+        <h4>
+          <span>Epsom Salt (MgSO₄·7H₂O)</span>
+          <span class="nc-comp-amount" id="outEP">—</span>
+        </h4>
+        <div class="nc-comp-subrow">
+          <span>Dose:</span>
+          <input type="number" class="nc-input nc-short" id="doseEP" value="0.317" step="any" min="0">
+          <span id="doseUnitEP">g / L</span>
+        </div>
+        <div class="nc-comp-subrow">
+          <span>%Mg</span><input type="number" class="nc-input nc-short" id="epMg" value="9.8" step="any" min="0">
+          <span>%S</span> <input type="number" class="nc-input nc-short" id="epS"  value="13"  step="any" min="0">
+        </div>
+      </div>
+
+      <!-- Calcium Nitrate -->
+      <div class="nc-comp">
+        <h4>
+          <span>Calcium Nitrate (add LAST)</span>
+          <span class="nc-comp-amount" id="outCN">—</span>
+        </h4>
+        <div class="nc-comp-subrow">
+          <span>Dose:</span>
+          <input type="number" class="nc-input nc-short" id="doseCN" value="0.634" step="any" min="0">
+          <span id="doseUnitCN">g / L</span>
+        </div>
+        <div class="nc-comp-subrow">
+          <span>%N</span> <input type="number" class="nc-input nc-short" id="cnN"  value="15.5" step="any" min="0">
+          <span>%Ca</span><input type="number" class="nc-input nc-short" id="cnCa" value="19"   step="any" min="0">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right: Outputs ─────────────────────────────────── -->
+    <div>
+      <div class="hs-card" style="margin-bottom: 16px;">
+        <h3 class="nc-section-title">Nutrient Profile (ppm)</h3>
+        <div class="nc-results">
+          <div class="nc-result-tile"><div class="nc-result-label">N</div><div class="nc-result-val" id="ppmN">—</div><div class="nc-result-sub" id="ppmNbreak">MB + CN</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">P</div><div class="nc-result-val" id="ppmP">—</div><div class="nc-result-sub" id="ppmPbreak">as P₂O₅: —</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">K</div><div class="nc-result-val" id="ppmK">—</div><div class="nc-result-sub" id="ppmKbreak">as K₂O: —</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">Ca</div><div class="nc-result-val" id="ppmCa">—</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">Mg</div><div class="nc-result-val" id="ppmMg">—</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">S</div><div class="nc-result-val" id="ppmS">—</div></div>
+        </div>
+        <div class="nc-note" id="tdsNote">Total dissolved fertilizer: —</div>
+      </div>
+
+      <div class="hs-card" style="margin-bottom: 16px;">
+        <h3 class="nc-section-title">Mixing Order</h3>
+        <div class="nc-order">
+          <ol>
+            <li>Fill container with water.</li>
+            <li>Add <strong>Masterblend</strong>, stir until dissolved.</li>
+            <li>Add <strong>Epsom Salt</strong>, stir until dissolved.</li>
+            <li>Add <strong>Calcium Nitrate</strong> <em>last</em>, stir until dissolved.</li>
+            <li>Check pH (target 5.5–6.5), adjust with pH down if needed.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="hs-card">
+        <h3 class="nc-section-title">pH Down Estimator</h3>
+        <div class="nc-row">
+          <label>Current pH</label>
+          <input type="number" class="nc-input nc-short" id="phCurrent" value="7.5" step="0.1" min="0" max="14">
+        </div>
+        <div class="nc-row">
+          <label>Target pH</label>
+          <input type="number" class="nc-input nc-short" id="phTarget" value="6.0" step="0.1" min="0" max="14">
+        </div>
+        <div class="nc-row">
+          <label>Acid strength rate</label>
+          <input type="number" class="nc-input nc-short" id="phRate" value="0.5" step="any" min="0">
+          <select class="nc-select" id="phRateUnit">
+            <option value="mL_per_gal">mL / gal / pH drop</option>
+            <option value="mL_per_L">mL / L / pH drop</option>
+          </select>
+        </div>
+        <div class="nc-row">
+          <label>Output volume unit</label>
+          <select class="nc-select" id="phOutUnit">
+            <option value="mL" selected>mL</option>
+            <option value="floz">fl oz</option>
+            <option value="tsp">tsp</option>
+            <option value="L">L</option>
+          </select>
+        </div>
+        <div class="nc-result-tile" style="margin-top: 8px;">
+          <div class="nc-result-label">pH down to add</div>
+          <div class="nc-result-val" id="phDose">—</div>
+          <div class="nc-result-sub" id="phDoseHint">estimate — measure &amp; titrate</div>
+        </div>
+        <div class="nc-note">
+          <strong>Note:</strong> pH down dose is an estimate. Water buffering (alkalinity) and acid concentration vary widely.
+          A common starting point for GH pH Down (~35% phosphoric) is <em>0.5 mL per gallon per 1.0 pH unit drop</em>.
+          For 85% phosphoric acid use ~0.1 mL/gal/pH. Always add slowly, stir, and re-test.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Unit conversion tables ─────────────────────────────
+  const VOL_TO_L = {
+    L: 1, mL: 0.001, gal: 3.785411784, floz: 0.0295735295625, qt: 0.9463529460, tsp: 0.00492892159
+  };
+  const MASS_FROM_G = {
+    g: 1, mg: 1000, kg: 0.001, oz: 1 / 28.349523125, lb: 1 / 453.59237
+  };
+
+  // ── Element ratios ─────────────────────────────────────
+  // Elemental P inside P2O5
+  const P_IN_P2O5 = 62.0 / 141.944;      // ≈ 0.4365
+  // Elemental K inside K2O
+  const K_IN_K2O  = 78.196 / 94.196;     // ≈ 0.8301
+
+  const $ = (id) => document.getElementById(id);
+  const num = (id, fb = 0) => {
+    const v = parseFloat($(id).value);
+    return Number.isFinite(v) ? v : fb;
+  };
+
+  // ── Formatting ─────────────────────────────────────────
+  function fmtMass(grams, unit) {
+    if (!Number.isFinite(grams)) return '—';
+    const v = grams * MASS_FROM_G[unit];
+    if (v === 0) return '0 ' + unit;
+    const abs = Math.abs(v);
+    let s;
+    if (abs >= 100) s = v.toFixed(1);
+    else if (abs >= 10) s = v.toFixed(2);
+    else if (abs >= 1) s = v.toFixed(3);
+    else if (abs >= 0.01) s = v.toFixed(4);
+    else s = v.toExponential(3);
+    return s + ' ' + unit;
+  }
+  function fmtPpm(v) {
+    if (!Number.isFinite(v)) return '—';
+    if (v >= 1000) return v.toFixed(0);
+    if (v >= 100)  return v.toFixed(0);
+    if (v >= 10)   return v.toFixed(1);
+    return v.toFixed(2);
+  }
+  function fmtVol(mL, unit) {
+    if (!Number.isFinite(mL)) return '—';
+    const liters = mL / 1000;
+    const v = liters / VOL_TO_L[unit];
+    if (v === 0) return '0 ' + unit;
+    const abs = Math.abs(v);
+    let s;
+    if (abs >= 100) s = v.toFixed(1);
+    else if (abs >= 10) s = v.toFixed(2);
+    else if (abs >= 1) s = v.toFixed(3);
+    else if (abs >= 0.01) s = v.toFixed(3);
+    else s = v.toExponential(3);
+    return s + ' ' + unit;
+  }
+
+  // ── Main recalculation ─────────────────────────────────
+  function recalc() {
+    const waterUnit = $('waterUnit').value;
+    const waterVol  = num('waterVol');
+    const massUnit  = $('massUnit').value;
+    const strength  = num('strength', 100) / 100;
+
+    // Convert water to liters for ppm math
+    const waterL = waterVol * VOL_TO_L[waterUnit];
+
+    // Doses are "grams per 1 unit of water volume (selected unit)"
+    // So total grams = dose × waterVol × strength
+    const doseMB = num('doseMB');
+    const doseEP = num('doseEP');
+    const doseCN = num('doseCN');
+
+    const gMB = doseMB * waterVol * strength;
+    const gEP = doseEP * waterVol * strength;
+    const gCN = doseCN * waterVol * strength;
+
+    // Update dose unit labels (e.g. "g / gal")
+    const doseLbl = 'g / ' + waterUnit;
+    $('doseUnitMB').textContent = doseLbl;
+    $('doseUnitEP').textContent = doseLbl;
+    $('doseUnitCN').textContent = doseLbl;
+
+    // Output amounts
+    $('outMB').textContent = fmtMass(gMB, massUnit);
+    $('outEP').textContent = fmtMass(gEP, massUnit);
+    $('outCN').textContent = fmtMass(gCN, massUnit);
+
+    // ── NPK ppm ─────────────────────────────────────────
+    // ppm of element X = (grams_fert × pct_X/100) / liters × 1000 (mg/g)
+    //                  = grams × pct_X × 10 / liters
+    const pct = (id) => num(id) / 100;
+    const mbNpct = pct('mbN'),  mbPpct = pct('mbP'),  mbKpct = pct('mbK');
+    const epMgpct = pct('epMg'), epSpct = pct('epS');
+    const cnNpct = pct('cnN'), cnCapct = pct('cnCa');
+
+    const ppm = (grams, fraction) => (waterL > 0) ? (grams * fraction * 1000 / waterL) : NaN;
+
+    const nFromMB = ppm(gMB, mbNpct);
+    const nFromCN = ppm(gCN, cnNpct);
+    const pPpm    = ppm(gMB, mbPpct * P_IN_P2O5);
+    const pPpmOx  = ppm(gMB, mbPpct);                  // as P2O5
+    const kPpm    = ppm(gMB, mbKpct * K_IN_K2O);
+    const kPpmOx  = ppm(gMB, mbKpct);                  // as K2O
+    const caPpm   = ppm(gCN, cnCapct);
+    const mgPpm   = ppm(gEP, epMgpct);
+    const sPpm    = ppm(gEP, epSpct);
+    const totalN  = nFromMB + nFromCN;
+
+    $('ppmN').textContent = fmtPpm(totalN);
+    $('ppmNbreak').textContent = 'MB: ' + fmtPpm(nFromMB) + ' · CN: ' + fmtPpm(nFromCN);
+    $('ppmP').textContent = fmtPpm(pPpm);
+    $('ppmPbreak').textContent = 'as P₂O₅: ' + fmtPpm(pPpmOx);
+    $('ppmK').textContent = fmtPpm(kPpm);
+    $('ppmKbreak').textContent = 'as K₂O: ' + fmtPpm(kPpmOx);
+    $('ppmCa').textContent = fmtPpm(caPpm);
+    $('ppmMg').textContent = fmtPpm(mgPpm);
+    $('ppmS').textContent  = fmtPpm(sPpm);
+
+    const totalGrams = gMB + gEP + gCN;
+    const totalPpm = (waterL > 0) ? (totalGrams * 1000 / waterL) : NaN;
+    $('tdsNote').textContent = 'Total fertilizer: ' + fmtMass(totalGrams, massUnit) +
+      ' in ' + waterVol + ' ' + waterUnit +
+      ' (≈ ' + fmtPpm(totalPpm) + ' ppm dissolved).';
+
+    // ── pH down ─────────────────────────────────────────
+    const phCur = num('phCurrent');
+    const phTgt = num('phTarget');
+    const phRate = num('phRate');
+    const phRateUnit = $('phRateUnit').value;
+    const phOutUnit = $('phOutUnit').value;
+    const dPh = phCur - phTgt;
+
+    let phDoseHintEl = $('phDoseHint');
+    let phOut;
+    if (dPh <= 0) {
+      phOut = 0;
+      phDoseHintEl.textContent = 'pH already at or below target — no acid needed.';
+    } else {
+      // Convert water volume to the rate's reference unit
+      let refWaterVol;
+      if (phRateUnit === 'mL_per_gal') refWaterVol = waterL / VOL_TO_L.gal;
+      else refWaterVol = waterL;                   // mL_per_L
+      // mL of acid = rate × refVolume × ΔpH
+      const mL = phRate * refWaterVol * dPh;
+      $('phDose').textContent = fmtVol(mL, phOutUnit);
+      phDoseHintEl.textContent = 'Drop pH by ' + dPh.toFixed(2) + ' — add slowly, stir, re-test.';
+      return;
+    }
+    $('phDose').textContent = fmtVol(phOut, phOutUnit);
+  }
+
+  // ── Presets ────────────────────────────────────────────
+  // Standard Masterblend "Tomato" formula: 2.4 g/gal MB, 2.4 g/gal CN, 1.2 g/gal Epsom
+  // In g/L: 0.634, 0.634, 0.317
+  function loadStandardPreset() {
+    const wu = $('waterUnit').value;
+    const factor = VOL_TO_L.gal / VOL_TO_L[wu]; // converts g/gal → g/(selected unit)
+    $('doseMB').value = (2.4 / factor).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    $('doseCN').value = (2.4 / factor).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    $('doseEP').value = (1.2 / factor).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    $('mbN').value = 4;   $('mbP').value = 18; $('mbK').value = 38;
+    $('cnN').value = 15.5; $('cnCa').value = 19;
+    $('epMg').value = 9.8; $('epS').value = 13;
+    recalc();
+  }
+
+  // When water unit changes, rescale doses so the recipe stays the same
+  let prevWaterUnit = $('waterUnit').value;
+  function onWaterUnitChange() {
+    const newUnit = $('waterUnit').value;
+    const factor = VOL_TO_L[prevWaterUnit] / VOL_TO_L[newUnit];
+    // dose is mass per 1 unit → if 1 new_unit is larger, dose scales up by factor
+    ['doseMB', 'doseCN', 'doseEP'].forEach(id => {
+      const cur = parseFloat($(id).value);
+      if (Number.isFinite(cur)) $(id).value = +(cur * factor).toFixed(6);
+    });
+    prevWaterUnit = newUnit;
+    recalc();
+  }
+
+  // ── Wire up ────────────────────────────────────────────
+  const liveIds = [
+    'waterVol', 'strength', 'massUnit',
+    'doseMB', 'doseEP', 'doseCN',
+    'mbN', 'mbP', 'mbK', 'epMg', 'epS', 'cnN', 'cnCa',
+    'phCurrent', 'phTarget', 'phRate', 'phRateUnit', 'phOutUnit',
+  ];
+  liveIds.forEach(id => {
+    const el = $(id);
+    el.addEventListener('input', recalc);
+    el.addEventListener('change', recalc);
+  });
+  $('waterUnit').addEventListener('change', onWaterUnitChange);
+  $('btnPresetStandard').addEventListener('click', loadStandardPreset);
+
+  recalc();
+})();
+</script>
+{% endblock %}

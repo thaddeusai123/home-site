@@ -24,6 +24,7 @@ from flask import Flask, jsonify, render_template, request
 APPS = [
     "apps.orchard_planner",
     "apps.poop_tracker",
+    "apps.nutrient_calc",
 ]
 
 app = Flask(__name__)
