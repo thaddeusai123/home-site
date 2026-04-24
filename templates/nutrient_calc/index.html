@@ -2,146 +2,301 @@
 {% block title %}Nutrient Calculator{% endblock %}
 {% block content %}
 <style>
-  .nc-wrap { max-width: 960px; margin: 0 auto; }
+  .nc-wrap { max-width: 980px; margin: 0 auto; }
   .nc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  @media (max-width: 780px) { .nc-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 820px) { .nc-grid { grid-template-columns: 1fr; } }
 
-  .nc-section-title { margin: 0 0 12px; font-size: 16px; color: var(--hl-accent); letter-spacing: 0.5px; text-transform: uppercase; }
+  .nc-section-title { margin: 0 0 10px; font-size: 13px; color: var(--hl-accent); letter-spacing: 0.8px; text-transform: uppercase; font-weight: 700; }
   .nc-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
   .nc-row label { flex: 1 1 160px; color: var(--hl-muted); font-size: 13px; }
   .nc-input, .nc-select {
     background: var(--hl-bg-alt); color: var(--hl-text);
     border: 1px solid var(--hl-border); border-radius: 6px;
     padding: 7px 10px; font-size: 14px; font-family: inherit;
-    min-width: 80px;
+    min-width: 70px;
   }
-  .nc-input:focus, .nc-select:focus { outline: none; border-color: var(--hl-accent); }
+  .nc-input:focus, .nc-select:focus { outline: none; border-color: var(--hl-accent); box-shadow: 0 0 0 3px rgba(46,196,182,0.12); }
   .nc-input.nc-num { width: 90px; text-align: right; font-family: var(--hl-mono); }
   .nc-input.nc-short { width: 70px; text-align: right; font-family: var(--hl-mono); }
 
-  .nc-comp { padding: 12px; border: 1px solid var(--hl-border); border-radius: 8px; margin-bottom: 12px; background: var(--hl-bg-alt); }
-  .nc-comp h4 { margin: 0 0 8px; font-size: 14px; color: var(--hl-accent-2); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .nc-comp-amount { font-family: var(--hl-mono); font-size: 16px; color: var(--hl-text); font-weight: 600; }
-  .nc-comp-subrow { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--hl-muted); align-items: center; margin-top: 4px; }
-  .nc-comp-subrow .nc-input { font-size: 12px; padding: 4px 6px; }
+  /* ── Slider ─────────────────────────────── */
+  .nc-slider-wrap { margin: 4px 0 14px; }
+  .nc-slider-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .nc-slider-head label { color: var(--hl-muted); font-size: 13px; }
+  .nc-slider-val { display: flex; gap: 6px; align-items: center; }
+  .nc-slider-val .nc-input { width: 90px; }
+  .nc-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 6px; border-radius: 3px;
+    background: linear-gradient(90deg, var(--hl-accent) 0%, var(--hl-accent) var(--nc-fill, 50%), var(--hl-panel-alt) var(--nc-fill, 50%), var(--hl-panel-alt) 100%);
+    outline: none; margin: 0; cursor: pointer;
+  }
+  .nc-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--hl-accent); cursor: pointer; border: 3px solid var(--hl-bg);
+    box-shadow: 0 0 0 2px var(--hl-accent), 0 2px 8px rgba(0,0,0,0.4);
+    transition: transform 80ms;
+  }
+  .nc-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  .nc-slider::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--hl-accent); cursor: pointer; border: 3px solid var(--hl-bg);
+    box-shadow: 0 0 0 2px var(--hl-accent);
+  }
 
+  /* ── Preset chips ───────────────────────── */
+  .nc-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .nc-chip {
+    padding: 6px 12px; border-radius: 16px;
+    background: var(--hl-panel); border: 1px solid var(--hl-border);
+    color: var(--hl-text); cursor: pointer; font-size: 12px; font-weight: 500;
+    transition: all 120ms; font-family: inherit;
+  }
+  .nc-chip:hover { border-color: var(--hl-accent); color: var(--hl-accent); background: rgba(46,196,182,0.06); }
+  .nc-chip.active { background: rgba(46,196,182,0.18); border-color: var(--hl-accent); color: var(--hl-accent); box-shadow: 0 0 0 2px rgba(46,196,182,0.08); }
+
+  /* ── Component cards ────────────────────── */
+  .nc-comp {
+    padding: 14px 14px 10px; border: 1px solid var(--hl-border); border-radius: 10px;
+    margin-bottom: 12px; background: var(--hl-bg-alt);
+    border-left: 4px solid var(--nc-comp-color, var(--hl-accent));
+  }
+  .nc-comp-mb { --nc-comp-color: #c77dff; }  /* Masterblend — violet */
+  .nc-comp-ep { --nc-comp-color: #86efac; }  /* Epsom      — green */
+  .nc-comp-cn { --nc-comp-color: #fde68a; }  /* CalNit     — yellow */
+
+  .nc-comp-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .nc-comp-title { font-size: 14px; font-weight: 600; color: var(--hl-text); }
+  .nc-comp-sub { font-size: 11px; color: var(--hl-muted); }
+
+  .nc-dual { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: end; }
+  .nc-dual-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .nc-dual-label { font-size: 10px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  .nc-dual-input { display: flex; gap: 4px; align-items: center; }
+  .nc-dual-input .nc-input { flex: 1; min-width: 0; width: 100%; font-size: 15px; font-weight: 600; }
+  .nc-dual-unit { font-size: 11px; color: var(--hl-muted); white-space: nowrap; font-family: var(--hl-mono); }
+  .nc-dual-sep { font-size: 20px; color: var(--hl-muted); padding: 0 4px 5px; }
+
+  .nc-npk-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; align-items: center; padding-top: 8px; border-top: 1px dashed var(--hl-border); }
+  .nc-npk-label { font-size: 11px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-right: 4px; }
+  .nc-npk-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--hl-muted); }
+  .nc-npk-pill .nc-input { width: 54px; padding: 3px 6px; font-size: 12px; }
+
+  /* ── Results tiles ──────────────────────── */
   .nc-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 8px; }
   .nc-result-tile {
-    padding: 10px 12px; border-radius: 8px; background: var(--hl-panel);
+    padding: 12px; border-radius: 8px; background: var(--hl-panel);
     border: 1px solid var(--hl-border); text-align: center;
+    transition: border-color 150ms;
   }
-  .nc-result-label { font-size: 11px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .nc-result-val { font-family: var(--hl-mono); font-size: 20px; color: var(--hl-accent); font-weight: 600; margin-top: 2px; }
-  .nc-result-sub { font-size: 10px; color: var(--hl-muted); margin-top: 1px; }
+  .nc-result-label { font-size: 11px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
+  .nc-result-val { font-family: var(--hl-mono); font-size: 22px; color: var(--hl-accent); font-weight: 700; margin-top: 3px; line-height: 1.1; }
+  .nc-result-sub { font-size: 10px; color: var(--hl-muted); margin-top: 2px; }
+  /* per-nutrient colors */
+  #ppmN  { color: #70d884; }
+  #ppmP  { color: #c77dff; }
+  #ppmK  { color: #ffb347; }
+  #ppmCa { color: #7fd8ce; }
+  #ppmMg { color: #86efac; }
+  #ppmS  { color: #fde68a; }
 
+  /* ── Misc ───────────────────────────────── */
   .nc-btn {
     padding: 6px 12px; border-radius: 6px; border: 1px solid var(--hl-border);
-    background: var(--hl-panel); color: var(--hl-text); cursor: pointer; font-size: 13px;
+    background: var(--hl-panel); color: var(--hl-text); cursor: pointer; font-size: 13px; font-family: inherit;
   }
   .nc-btn:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
-
   .nc-note { font-size: 12px; color: var(--hl-muted); margin-top: 10px; line-height: 1.5; }
   .nc-note strong { color: var(--hl-warn); }
   .nc-order { background: rgba(46,196,182,0.06); border-left: 3px solid var(--hl-accent); padding: 10px 14px; border-radius: 4px; font-size: 13px; }
   .nc-order ol { margin: 6px 0 0 20px; padding: 0; }
   .nc-order li { margin-bottom: 2px; }
+
+  .nc-recipes-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .nc-recipes-row .nc-select, .nc-recipes-row .nc-input { flex: 1 1 140px; min-width: 0; }
+  .nc-btn-primary {
+    padding: 6px 14px; border-radius: 6px; border: 1px solid var(--hl-accent);
+    background: rgba(46,196,182,0.12); color: var(--hl-accent); cursor: pointer;
+    font-size: 13px; font-weight: 600; font-family: inherit;
+  }
+  .nc-btn-primary:hover { background: rgba(46,196,182,0.22); }
+  .nc-btn-danger {
+    padding: 6px 10px; border-radius: 6px; border: 1px solid var(--hl-border);
+    background: var(--hl-panel); color: var(--hl-danger); cursor: pointer; font-size: 13px;
+  }
+  .nc-btn-danger:hover { border-color: var(--hl-danger); }
+  .nc-btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+  .nc-status { font-size: 12px; color: var(--hl-muted); min-height: 16px; }
+  .nc-status.ok { color: var(--hl-ok); }
+  .nc-status.err { color: var(--hl-danger); }
 </style>
 
 <div class="nc-wrap">
   <div class="hs-card" style="margin-bottom: 20px;">
-    <h2>🧪 Nutrient Calculator</h2>
-    <p class="hs-muted" style="margin:0;">Mix Masterblend 4-18-38, Calcium Nitrate, and Epsom Salt. Every field is editable — change any value and the results update instantly.</p>
+    <h2 style="margin:0 0 4px;">🧪 Nutrient Calculator</h2>
+    <p class="hs-muted" style="margin:0; font-size:13px;">Masterblend 4-18-38 + Calcium Nitrate + Epsom. Type a <em>dose per unit</em> or a <em>batch total</em> — they stay in sync.</p>
   </div>
 
   <div class="nc-grid">
     <!-- ── Left: Inputs ──────────────────────────────────── -->
     <div class="hs-card">
-      <h3 class="nc-section-title">Water &amp; Units</h3>
-
-      <div class="nc-row">
-        <label>Water volume</label>
-        <input type="number" class="nc-input nc-num" id="waterVol" value="5" min="0" step="any">
-        <select class="nc-select" id="waterUnit">
-          <option value="gal">gallons</option>
-          <option value="L" selected>liters</option>
-          <option value="mL">milliliters</option>
-          <option value="floz">fl oz</option>
-          <option value="qt">quarts</option>
+      <h3 class="nc-section-title">Saved Recipes</h3>
+      <div class="nc-recipes-row">
+        <select class="nc-select" id="recipeSelect">
+          <option value="">— load saved recipe —</option>
         </select>
+        <button type="button" class="nc-btn-danger" id="btnRecipeDelete" disabled title="Delete selected recipe">🗑</button>
+      </div>
+      <div class="nc-recipes-row">
+        <input type="text" class="nc-input" id="recipeName" placeholder="Recipe name (e.g. Tomato Full)">
+        <button type="button" class="nc-btn-primary" id="btnRecipeSave">Save</button>
+      </div>
+      <div class="nc-status" id="recipeStatus">Values auto-save on this device between visits.</div>
+
+      <h3 class="nc-section-title" style="margin-top: 18px;">Batch</h3>
+
+      <!-- Water volume with slider -->
+      <div class="nc-slider-wrap">
+        <div class="nc-slider-head">
+          <label>Water volume</label>
+          <div class="nc-slider-val">
+            <input type="number" class="nc-input nc-num" id="waterVol" value="5" min="0" step="any">
+            <select class="nc-select" id="waterUnit">
+              <option value="gal">gal</option>
+              <option value="L" selected>L</option>
+              <option value="mL">mL</option>
+              <option value="floz">fl oz</option>
+              <option value="qt">qt</option>
+            </select>
+          </div>
+        </div>
+        <input type="range" class="nc-slider" id="waterVolSlider" min="0" max="200" step="0.1" value="5">
       </div>
 
+      <!-- Strength with slider + chips -->
+      <div class="nc-slider-wrap">
+        <div class="nc-slider-head">
+          <label>Strength</label>
+          <div class="nc-slider-val">
+            <input type="number" class="nc-input nc-num" id="strength" value="100" min="0" step="any">
+            <span style="color: var(--hl-muted); font-size: 13px;">%</span>
+          </div>
+        </div>
+        <input type="range" class="nc-slider" id="strengthSlider" min="0" max="200" step="1" value="100">
+        <div class="nc-chips" id="strengthChips">
+          <button type="button" class="nc-chip" data-strength="25">🌱 Seedling</button>
+          <button type="button" class="nc-chip" data-strength="50">🥬 Leafy</button>
+          <button type="button" class="nc-chip" data-strength="100">🍅 Tomato</button>
+          <button type="button" class="nc-chip" data-strength="125">💪 Heavy</button>
+        </div>
+      </div>
+
+      <!-- Mass unit -->
       <div class="nc-row">
-        <label>Output mass unit</label>
+        <label>Display mass in</label>
         <select class="nc-select" id="massUnit">
-          <option value="g" selected>grams</option>
-          <option value="mg">milligrams</option>
-          <option value="kg">kilograms</option>
-          <option value="oz">ounces</option>
-          <option value="lb">pounds</option>
+          <option value="g" selected>grams (g)</option>
+          <option value="mg">milligrams (mg)</option>
+          <option value="kg">kilograms (kg)</option>
+          <option value="oz">ounces (oz)</option>
+          <option value="lb">pounds (lb)</option>
         </select>
       </div>
 
-      <div class="nc-row">
-        <label>Strength (%)</label>
-        <input type="number" class="nc-input nc-num" id="strength" value="100" min="0" step="any">
-        <span class="hs-muted" style="font-size:12px;">100% = full dose</span>
-      </div>
-
-      <h3 class="nc-section-title" style="margin-top: 18px;">Components</h3>
-      <div class="hs-muted" style="font-size: 12px; margin-bottom: 8px;">
-        Dose is mass per 1 unit of water volume. Defaults: standard Masterblend "Tomato" formula (2.4-2.4-1.2 g/gal).
-        <button type="button" class="nc-btn" id="btnPresetStandard" style="margin-left:4px; font-size:11px;">Load defaults</button>
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 8px;">
+        <h3 class="nc-section-title" style="margin: 0;">Components</h3>
+        <button type="button" class="nc-btn" id="btnPresetStandard" style="font-size:11px;">Load defaults</button>
       </div>
 
       <!-- Masterblend -->
-      <div class="nc-comp">
-        <h4>
-          <span>Masterblend 4-18-38</span>
-          <span class="nc-comp-amount" id="outMB">—</span>
-        </h4>
-        <div class="nc-comp-subrow">
-          <span>Dose:</span>
-          <input type="number" class="nc-input nc-short" id="doseMB" value="0.634" step="any" min="0">
-          <span id="doseUnitMB">g / L</span>
+      <div class="nc-comp nc-comp-mb">
+        <div class="nc-comp-head">
+          <span class="nc-comp-title">Masterblend 4-18-38</span>
+          <span class="nc-comp-sub">add first</span>
         </div>
-        <div class="nc-comp-subrow">
-          <span>%N</span>  <input type="number" class="nc-input nc-short" id="mbN"  value="4"  step="any" min="0">
-          <span>%P₂O₅</span><input type="number" class="nc-input nc-short" id="mbP" value="18" step="any" min="0">
-          <span>%K₂O</span> <input type="number" class="nc-input nc-short" id="mbK" value="38" step="any" min="0">
+        <div class="nc-dual">
+          <div class="nc-dual-field">
+            <span class="nc-dual-label">Dose</span>
+            <div class="nc-dual-input">
+              <input type="number" class="nc-input" id="doseMB" value="0.634" step="any" min="0">
+              <span class="nc-dual-unit" id="doseUnitMB">g/L</span>
+            </div>
+          </div>
+          <div class="nc-dual-sep">=</div>
+          <div class="nc-dual-field">
+            <span class="nc-dual-label">Batch Total</span>
+            <div class="nc-dual-input">
+              <input type="number" class="nc-input" id="totalMB" step="any" min="0">
+              <span class="nc-dual-unit" id="totalUnitMB">g</span>
+            </div>
+          </div>
+        </div>
+        <div class="nc-npk-row">
+          <span class="nc-npk-label">Analysis</span>
+          <span class="nc-npk-pill">N <input type="number" class="nc-input" id="mbN" value="4" step="any" min="0">%</span>
+          <span class="nc-npk-pill">P₂O₅ <input type="number" class="nc-input" id="mbP" value="18" step="any" min="0">%</span>
+          <span class="nc-npk-pill">K₂O <input type="number" class="nc-input" id="mbK" value="38" step="any" min="0">%</span>
         </div>
       </div>
 
       <!-- Epsom -->
-      <div class="nc-comp">
-        <h4>
-          <span>Epsom Salt (MgSO₄·7H₂O)</span>
-          <span class="nc-comp-amount" id="outEP">—</span>
-        </h4>
-        <div class="nc-comp-subrow">
-          <span>Dose:</span>
-          <input type="number" class="nc-input nc-short" id="doseEP" value="0.317" step="any" min="0">
-          <span id="doseUnitEP">g / L</span>
+      <div class="nc-comp nc-comp-ep">
+        <div class="nc-comp-head">
+          <span class="nc-comp-title">Epsom Salt (MgSO₄·7H₂O)</span>
+          <span class="nc-comp-sub">add second</span>
         </div>
-        <div class="nc-comp-subrow">
-          <span>%Mg</span><input type="number" class="nc-input nc-short" id="epMg" value="9.8" step="any" min="0">
-          <span>%S</span> <input type="number" class="nc-input nc-short" id="epS"  value="13"  step="any" min="0">
+        <div class="nc-dual">
+          <div class="nc-dual-field">
+            <span class="nc-dual-label">Dose</span>
+            <div class="nc-dual-input">
+              <input type="number" class="nc-input" id="doseEP" value="0.317" step="any" min="0">
+              <span class="nc-dual-unit" id="doseUnitEP">g/L</span>
+            </div>
+          </div>
+          <div class="nc-dual-sep">=</div>
+          <div class="nc-dual-field">
+            <span class="nc-dual-label">Batch Total</span>
+            <div class="nc-dual-input">
+              <input type="number" class="nc-input" id="totalEP" step="any" min="0">
+              <span class="nc-dual-unit" id="totalUnitEP">g</span>
+            </div>
+          </div>
+        </div>
+        <div class="nc-npk-row">
+          <span class="nc-npk-label">Analysis</span>
+          <span class="nc-npk-pill">Mg <input type="number" class="nc-input" id="epMg" value="9.8" step="any" min="0">%</span>
+          <span class="nc-npk-pill">S <input type="number" class="nc-input" id="epS" value="13" step="any" min="0">%</span>
         </div>
       </div>
 
       <!-- Calcium Nitrate -->
-      <div class="nc-comp">
-        <h4>
-          <span>Calcium Nitrate (add LAST)</span>
-          <span class="nc-comp-amount" id="outCN">—</span>
-        </h4>
-        <div class="nc-comp-subrow">
-          <span>Dose:</span>
-          <input type="number" class="nc-input nc-short" id="doseCN" value="0.634" step="any" min="0">
-          <span id="doseUnitCN">g / L</span>
+      <div class="nc-comp nc-comp-cn">
+        <div class="nc-comp-head">
+          <span class="nc-comp-title">Calcium Nitrate</span>
+          <span class="nc-comp-sub">add LAST</span>
         </div>
-        <div class="nc-comp-subrow">
-          <span>%N</span> <input type="number" class="nc-input nc-short" id="cnN"  value="15.5" step="any" min="0">
-          <span>%Ca</span><input type="number" class="nc-input nc-short" id="cnCa" value="19"   step="any" min="0">
+        <div class="nc-dual">
+          <div class="nc-dual-field">
+            <span class="nc-dual-label">Dose</span>
+            <div class="nc-dual-input">
+              <input type="number" class="nc-input" id="doseCN" value="0.634" step="any" min="0">
+              <span class="nc-dual-unit" id="doseUnitCN">g/L</span>
+            </div>
+          </div>
+          <div class="nc-dual-sep">=</div>
+          <div class="nc-dual-field">
+            <span class="nc-dual-label">Batch Total</span>
+            <div class="nc-dual-input">
+              <input type="number" class="nc-input" id="totalCN" step="any" min="0">
+              <span class="nc-dual-unit" id="totalUnitCN">g</span>
+            </div>
+          </div>
+        </div>
+        <div class="nc-npk-row">
+          <span class="nc-npk-label">Analysis</span>
+          <span class="nc-npk-pill">N <input type="number" class="nc-input" id="cnN" value="15.5" step="any" min="0">%</span>
+          <span class="nc-npk-pill">Ca <input type="number" class="nc-input" id="cnCa" value="19" step="any" min="0">%</span>
         </div>
       </div>
     </div>
@@ -154,9 +309,9 @@
           <div class="nc-result-tile"><div class="nc-result-label">N</div><div class="nc-result-val" id="ppmN">—</div><div class="nc-result-sub" id="ppmNbreak">MB + CN</div></div>
           <div class="nc-result-tile"><div class="nc-result-label">P</div><div class="nc-result-val" id="ppmP">—</div><div class="nc-result-sub" id="ppmPbreak">as P₂O₅: —</div></div>
           <div class="nc-result-tile"><div class="nc-result-label">K</div><div class="nc-result-val" id="ppmK">—</div><div class="nc-result-sub" id="ppmKbreak">as K₂O: —</div></div>
-          <div class="nc-result-tile"><div class="nc-result-label">Ca</div><div class="nc-result-val" id="ppmCa">—</div></div>
-          <div class="nc-result-tile"><div class="nc-result-label">Mg</div><div class="nc-result-val" id="ppmMg">—</div></div>
-          <div class="nc-result-tile"><div class="nc-result-label">S</div><div class="nc-result-val" id="ppmS">—</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">Ca</div><div class="nc-result-val" id="ppmCa">—</div><div class="nc-result-sub">from CalNit</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">Mg</div><div class="nc-result-val" id="ppmMg">—</div><div class="nc-result-sub">from Epsom</div></div>
+          <div class="nc-result-tile"><div class="nc-result-label">S</div><div class="nc-result-val" id="ppmS">—</div><div class="nc-result-sub">from Epsom</div></div>
         </div>
         <div class="nc-note" id="tdsNote">Total dissolved fertilizer: —</div>
       </div>
@@ -185,7 +340,7 @@
           <input type="number" class="nc-input nc-short" id="phTarget" value="6.0" step="0.1" min="0" max="14">
         </div>
         <div class="nc-row">
-          <label>Acid strength rate</label>
+          <label>Acid dose rate</label>
           <input type="number" class="nc-input nc-short" id="phRate" value="0.5" step="any" min="0">
           <select class="nc-select" id="phRateUnit">
             <option value="mL_per_gal">mL / gal / pH drop</option>
@@ -207,9 +362,9 @@
           <div class="nc-result-sub" id="phDoseHint">estimate — measure &amp; titrate</div>
         </div>
         <div class="nc-note">
-          <strong>Note:</strong> pH down dose is an estimate. Water buffering (alkalinity) and acid concentration vary widely.
-          A common starting point for GH pH Down (~35% phosphoric) is <em>0.5 mL per gallon per 1.0 pH unit drop</em>.
-          For 85% phosphoric acid use ~0.1 mL/gal/pH. Always add slowly, stir, and re-test.
+          <strong>Note:</strong> pH down dose is an estimate. Water buffering (alkalinity) varies.
+          A common starting point for GH pH Down (~35% phosphoric) is <em>0.5 mL per gal per 1.0 pH unit drop</em>.
+          For 85% phosphoric acid use ~0.1 mL/gal/pH. Add slowly, stir, re-test.
         </div>
       </div>
     </div>
@@ -226,11 +381,11 @@
     g: 1, mg: 1000, kg: 0.001, oz: 1 / 28.349523125, lb: 1 / 453.59237
   };
 
-  // ── Element ratios ─────────────────────────────────────
-  // Elemental P inside P2O5
-  const P_IN_P2O5 = 62.0 / 141.944;      // ≈ 0.4365
-  // Elemental K inside K2O
-  const K_IN_K2O  = 78.196 / 94.196;     // ≈ 0.8301
+  const P_IN_P2O5 = 62.0 / 141.944;    // ≈ 0.4365
+  const K_IN_K2O  = 78.196 / 94.196;   // ≈ 0.8301
+
+  // Reasonable default slider-max per water unit
+  const WATER_MAX = { gal: 50, L: 200, mL: 20000, floz: 6400, qt: 50 };
 
   const $ = (id) => document.getElementById(id);
   const num = (id, fb = 0) => {
@@ -239,30 +394,27 @@
   };
 
   // ── Formatting ─────────────────────────────────────────
-  function fmtMass(grams, unit) {
-    if (!Number.isFinite(grams)) return '—';
-    const v = grams * MASS_FROM_G[unit];
-    if (v === 0) return '0 ' + unit;
+  function fmt(v) {
+    if (!Number.isFinite(v)) return '';
+    if (v === 0) return '0';
     const abs = Math.abs(v);
-    let s;
-    if (abs >= 100) s = v.toFixed(1);
-    else if (abs >= 10) s = v.toFixed(2);
-    else if (abs >= 1) s = v.toFixed(3);
-    else if (abs >= 0.01) s = v.toFixed(4);
-    else s = v.toExponential(3);
-    return s + ' ' + unit;
+    let d;
+    if (abs >= 100) d = 1;
+    else if (abs >= 10) d = 2;
+    else if (abs >= 1) d = 3;
+    else if (abs >= 0.01) d = 4;
+    else d = 6;
+    return parseFloat(v.toFixed(d)).toString();
   }
   function fmtPpm(v) {
     if (!Number.isFinite(v)) return '—';
-    if (v >= 1000) return v.toFixed(0);
-    if (v >= 100)  return v.toFixed(0);
-    if (v >= 10)   return v.toFixed(1);
+    if (v >= 100) return v.toFixed(0);
+    if (v >= 10)  return v.toFixed(1);
     return v.toFixed(2);
   }
   function fmtVol(mL, unit) {
     if (!Number.isFinite(mL)) return '—';
-    const liters = mL / 1000;
-    const v = liters / VOL_TO_L[unit];
+    const v = (mL / 1000) / VOL_TO_L[unit];
     if (v === 0) return '0 ' + unit;
     const abs = Math.abs(v);
     let s;
@@ -274,56 +426,127 @@
     return s + ' ' + unit;
   }
 
+  // ── Persisted fields ───────────────────────────────────
+  const STATE_KEY = 'nc_session_state_v1';
+  const STATE_FIELDS = [
+    'waterVol', 'waterUnit', 'massUnit', 'strength',
+    'doseMB', 'doseEP', 'doseCN',
+    'mbN', 'mbP', 'mbK', 'epMg', 'epS', 'cnN', 'cnCa',
+    'phCurrent', 'phTarget', 'phRate', 'phRateUnit', 'phOutUnit',
+  ];
+  function collectState() {
+    const out = {};
+    for (const id of STATE_FIELDS) out[id] = $(id).value;
+    return out;
+  }
+  let applyingState = false;
+  function applyState(s) {
+    if (!s || typeof s !== 'object') return;
+    applyingState = true;
+    try {
+      for (const id of STATE_FIELDS) {
+        if (id in s && s[id] !== null && s[id] !== undefined) $(id).value = s[id];
+      }
+      prevWaterUnit = $('waterUnit').value;
+      prevMassUnit  = $('massUnit').value;
+    } finally { applyingState = false; }
+  }
+  function saveSession() {
+    try { localStorage.setItem(STATE_KEY, JSON.stringify(collectState())); } catch (_) {}
+  }
+  function loadSession() {
+    try { return JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch (_) { return null; }
+  }
+
+  // ── Slider <-> number binding ──────────────────────────
+  function paintSlider(slider) {
+    const min = parseFloat(slider.min) || 0;
+    const max = parseFloat(slider.max) || 100;
+    const val = parseFloat(slider.value) || 0;
+    const pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+    slider.style.setProperty('--nc-fill', pct + '%');
+  }
+  function bindSlider(sliderId, inputId, opts = {}) {
+    const s = $(sliderId), i = $(inputId);
+    const autoGrow = opts.autoGrow !== false;
+    function fromSlider() {
+      i.value = s.value;
+      paintSlider(s);
+      recalc();
+    }
+    function fromInput() {
+      const v = parseFloat(i.value);
+      if (!Number.isFinite(v)) return;
+      if (autoGrow && v > parseFloat(s.max)) s.max = String(Math.ceil(v * 1.5));
+      s.value = Math.max(parseFloat(s.min), Math.min(parseFloat(s.max), v));
+      paintSlider(s);
+    }
+    s.addEventListener('input', fromSlider);
+    i.addEventListener('input', () => { fromInput(); recalc(); });
+    i.addEventListener('change', fromInput);
+    return { syncFromInput: fromInput };
+  }
+
+  // ── Dual dose ↔ total binding ──────────────────────────
+  // Dose (in massUnit / waterUnit) is canonical/persisted.
+  // Total = dose × waterVol × (strength/100) — same mass unit.
+  function onTotalEdited(comp) {
+    if (applyingState) return;
+    const tEl = $('total' + comp);
+    const total = parseFloat(tEl.value);
+    const waterVol = num('waterVol');
+    const strength = num('strength', 100) / 100;
+    if (!Number.isFinite(total) || waterVol <= 0 || strength <= 0) return;
+    $('dose' + comp).value = fmt(total / (waterVol * strength));
+    recalc();
+  }
+
   // ── Main recalculation ─────────────────────────────────
   function recalc() {
     const waterUnit = $('waterUnit').value;
     const waterVol  = num('waterVol');
     const massUnit  = $('massUnit').value;
-    const strength  = num('strength', 100) / 100;
-
-    // Convert water to liters for ppm math
+    const strengthF = num('strength', 100) / 100;
     const waterL = waterVol * VOL_TO_L[waterUnit];
 
-    // Doses are "grams per 1 unit of water volume (selected unit)"
-    // So total grams = dose × waterVol × strength
-    const doseMB = num('doseMB');
-    const doseEP = num('doseEP');
-    const doseCN = num('doseCN');
+    // Dose unit labels (e.g. "g/gal", "oz/L")
+    const doseLbl = massUnit + '/' + waterUnit;
+    for (const c of ['MB', 'EP', 'CN']) {
+      $('doseUnit' + c).textContent = doseLbl;
+      $('totalUnit' + c).textContent = massUnit;
+    }
 
-    const gMB = doseMB * waterVol * strength;
-    const gEP = doseEP * waterVol * strength;
-    const gCN = doseCN * waterVol * strength;
+    // Dose is in massUnit / waterUnit.
+    function compute(comp) {
+      const dose = num('dose' + comp);
+      const totalInMassUnit = dose * waterVol * strengthF;
+      const grams = totalInMassUnit / MASS_FROM_G[massUnit];
+      // Write total field (unless user is editing it)
+      const tEl = $('total' + comp);
+      if (document.activeElement !== tEl) tEl.value = fmt(totalInMassUnit);
+      return { grams, totalInMassUnit };
+    }
+    const mb = compute('MB');
+    const ep = compute('EP');
+    const cn = compute('CN');
 
-    // Update dose unit labels (e.g. "g / gal")
-    const doseLbl = 'g / ' + waterUnit;
-    $('doseUnitMB').textContent = doseLbl;
-    $('doseUnitEP').textContent = doseLbl;
-    $('doseUnitCN').textContent = doseLbl;
-
-    // Output amounts
-    $('outMB').textContent = fmtMass(gMB, massUnit);
-    $('outEP').textContent = fmtMass(gEP, massUnit);
-    $('outCN').textContent = fmtMass(gCN, massUnit);
-
-    // ── NPK ppm ─────────────────────────────────────────
-    // ppm of element X = (grams_fert × pct_X/100) / liters × 1000 (mg/g)
-    //                  = grams × pct_X × 10 / liters
+    // ── NPK ppm ────────────────────────────────────────
     const pct = (id) => num(id) / 100;
-    const mbNpct = pct('mbN'),  mbPpct = pct('mbP'),  mbKpct = pct('mbK');
-    const epMgpct = pct('epMg'), epSpct = pct('epS');
-    const cnNpct = pct('cnN'), cnCapct = pct('cnCa');
+    const mbN = pct('mbN'), mbP = pct('mbP'), mbK = pct('mbK');
+    const epMg = pct('epMg'), epS = pct('epS');
+    const cnN = pct('cnN'), cnCa = pct('cnCa');
 
-    const ppm = (grams, fraction) => (waterL > 0) ? (grams * fraction * 1000 / waterL) : NaN;
+    const ppm = (grams, f) => (waterL > 0) ? (grams * f * 1000 / waterL) : NaN;
 
-    const nFromMB = ppm(gMB, mbNpct);
-    const nFromCN = ppm(gCN, cnNpct);
-    const pPpm    = ppm(gMB, mbPpct * P_IN_P2O5);
-    const pPpmOx  = ppm(gMB, mbPpct);                  // as P2O5
-    const kPpm    = ppm(gMB, mbKpct * K_IN_K2O);
-    const kPpmOx  = ppm(gMB, mbKpct);                  // as K2O
-    const caPpm   = ppm(gCN, cnCapct);
-    const mgPpm   = ppm(gEP, epMgpct);
-    const sPpm    = ppm(gEP, epSpct);
+    const nFromMB = ppm(mb.grams, mbN);
+    const nFromCN = ppm(cn.grams, cnN);
+    const pPpm    = ppm(mb.grams, mbP * P_IN_P2O5);
+    const pPpmOx  = ppm(mb.grams, mbP);
+    const kPpm    = ppm(mb.grams, mbK * K_IN_K2O);
+    const kPpmOx  = ppm(mb.grams, mbK);
+    const caPpm   = ppm(cn.grams, cnCa);
+    const mgPpm   = ppm(ep.grams, epMg);
+    const sPpm    = ppm(ep.grams, epS);
     const totalN  = nFromMB + nFromCN;
 
     $('ppmN').textContent = fmtPpm(totalN);
@@ -336,84 +559,228 @@
     $('ppmMg').textContent = fmtPpm(mgPpm);
     $('ppmS').textContent  = fmtPpm(sPpm);
 
-    const totalGrams = gMB + gEP + gCN;
+    const totalGrams = mb.grams + ep.grams + cn.grams;
+    const totalMass = totalGrams * MASS_FROM_G[massUnit];
     const totalPpm = (waterL > 0) ? (totalGrams * 1000 / waterL) : NaN;
-    $('tdsNote').textContent = 'Total fertilizer: ' + fmtMass(totalGrams, massUnit) +
-      ' in ' + waterVol + ' ' + waterUnit +
+    $('tdsNote').textContent =
+      'Total fertilizer: ' + fmt(totalMass) + ' ' + massUnit +
+      ' in ' + fmt(waterVol) + ' ' + waterUnit +
       ' (≈ ' + fmtPpm(totalPpm) + ' ppm dissolved).';
 
-    // ── pH down ─────────────────────────────────────────
-    const phCur = num('phCurrent');
-    const phTgt = num('phTarget');
-    const phRate = num('phRate');
+    // ── pH down ────────────────────────────────────────
+    const dPh = num('phCurrent') - num('phTarget');
+    const phDoseHintEl = $('phDoseHint');
     const phRateUnit = $('phRateUnit').value;
-    const phOutUnit = $('phOutUnit').value;
-    const dPh = phCur - phTgt;
-
-    let phDoseHintEl = $('phDoseHint');
-    let phOut;
+    const phOutUnit  = $('phOutUnit').value;
     if (dPh <= 0) {
-      phOut = 0;
+      $('phDose').textContent = fmtVol(0, phOutUnit);
       phDoseHintEl.textContent = 'pH already at or below target — no acid needed.';
     } else {
-      // Convert water volume to the rate's reference unit
-      let refWaterVol;
-      if (phRateUnit === 'mL_per_gal') refWaterVol = waterL / VOL_TO_L.gal;
-      else refWaterVol = waterL;                   // mL_per_L
-      // mL of acid = rate × refVolume × ΔpH
-      const mL = phRate * refWaterVol * dPh;
+      const refWaterVol = (phRateUnit === 'mL_per_gal') ? (waterL / VOL_TO_L.gal) : waterL;
+      const mL = num('phRate') * refWaterVol * dPh;
       $('phDose').textContent = fmtVol(mL, phOutUnit);
       phDoseHintEl.textContent = 'Drop pH by ' + dPh.toFixed(2) + ' — add slowly, stir, re-test.';
-      return;
     }
-    $('phDose').textContent = fmtVol(phOut, phOutUnit);
+
+    // ── Paint sliders ──────────────────────────────────
+    paintSlider($('waterVolSlider'));
+    paintSlider($('strengthSlider'));
+
+    // ── Strength chips active state ────────────────────
+    const s = Math.round(num('strength', 100));
+    document.querySelectorAll('#strengthChips .nc-chip').forEach(ch => {
+      ch.classList.toggle('active', parseInt(ch.dataset.strength, 10) === s);
+    });
+
+    saveSession();
   }
 
   // ── Presets ────────────────────────────────────────────
-  // Standard Masterblend "Tomato" formula: 2.4 g/gal MB, 2.4 g/gal CN, 1.2 g/gal Epsom
-  // In g/L: 0.634, 0.634, 0.317
+  // Standard Masterblend "Tomato": 2.4-2.4-1.2 g/gal
   function loadStandardPreset() {
     const wu = $('waterUnit').value;
-    const factor = VOL_TO_L.gal / VOL_TO_L[wu]; // converts g/gal → g/(selected unit)
-    $('doseMB').value = (2.4 / factor).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
-    $('doseCN').value = (2.4 / factor).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
-    $('doseEP').value = (1.2 / factor).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
-    $('mbN').value = 4;   $('mbP').value = 18; $('mbK').value = 38;
-    $('cnN').value = 15.5; $('cnCa').value = 19;
-    $('epMg').value = 9.8; $('epS').value = 13;
+    const mu = $('massUnit').value;
+    // Convert g/gal → (massUnit / waterUnit)
+    const f = (VOL_TO_L[wu] / VOL_TO_L.gal) * MASS_FROM_G[mu];
+    applyingState = true;
+    try {
+      $('doseMB').value = fmt(2.4 * f);
+      $('doseCN').value = fmt(2.4 * f);
+      $('doseEP').value = fmt(1.2 * f);
+      $('mbN').value = 4;    $('mbP').value = 18;  $('mbK').value = 38;
+      $('cnN').value = 15.5; $('cnCa').value = 19;
+      $('epMg').value = 9.8; $('epS').value = 13;
+    } finally { applyingState = false; }
     recalc();
   }
 
-  // When water unit changes, rescale doses so the recipe stays the same
+  // ── Water unit change: rescale doses so recipe stays constant ─
   let prevWaterUnit = $('waterUnit').value;
+  let prevMassUnit  = $('massUnit').value;
   function onWaterUnitChange() {
+    if (applyingState) { prevWaterUnit = $('waterUnit').value; updateWaterSliderRange(); recalc(); return; }
     const newUnit = $('waterUnit').value;
-    const factor = VOL_TO_L[prevWaterUnit] / VOL_TO_L[newUnit];
-    // dose is mass per 1 unit → if 1 new_unit is larger, dose scales up by factor
+    // dose is mass per 1 waterUnit; to preserve g/L, new dose = old dose × (new waterUnit in L) / (old waterUnit in L)
+    const factor = VOL_TO_L[newUnit] / VOL_TO_L[prevWaterUnit];
     ['doseMB', 'doseCN', 'doseEP'].forEach(id => {
       const cur = parseFloat($(id).value);
-      if (Number.isFinite(cur)) $(id).value = +(cur * factor).toFixed(6);
+      if (Number.isFinite(cur)) $(id).value = fmt(cur * factor);
     });
     prevWaterUnit = newUnit;
+    updateWaterSliderRange();
     recalc();
   }
+  function onMassUnitChange() {
+    if (applyingState) { prevMassUnit = $('massUnit').value; recalc(); return; }
+    const newUnit = $('massUnit').value;
+    // dose is in massUnit/waterUnit → rescale dose so grams-per-L is unchanged
+    const factor = MASS_FROM_G[newUnit] / MASS_FROM_G[prevMassUnit];
+    ['doseMB', 'doseCN', 'doseEP'].forEach(id => {
+      const cur = parseFloat($(id).value);
+      if (Number.isFinite(cur)) $(id).value = fmt(cur * factor);
+    });
+    prevMassUnit = newUnit;
+    recalc();
+  }
+  function updateWaterSliderRange() {
+    const u = $('waterUnit').value;
+    const slider = $('waterVolSlider');
+    const cur = parseFloat($('waterVol').value) || 0;
+    const desired = Math.max(WATER_MAX[u] || 100, Math.ceil(cur * 1.5));
+    slider.max = String(desired);
+    slider.value = String(Math.min(cur, desired));
+    paintSlider(slider);
+  }
+
+  // ── Saved recipes (server-side) ────────────────────────
+  const recipeSelect = $('recipeSelect');
+  const recipeName = $('recipeName');
+  const btnSave = $('btnRecipeSave');
+  const btnDelete = $('btnRecipeDelete');
+  const status = $('recipeStatus');
+  let recipes = [];
+
+  function setStatus(msg, kind) {
+    status.textContent = msg || '';
+    status.className = 'nc-status' + (kind ? ' ' + kind : '');
+    if (kind === 'ok') setTimeout(() => { if (status.textContent === msg) setStatus(''); }, 2500);
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function renderRecipeOptions(selectedId) {
+    const cur = selectedId ?? recipeSelect.value;
+    recipeSelect.innerHTML = '<option value="">— load saved recipe —</option>' +
+      recipes.map(r => '<option value="' + r.id + '">' + escapeHtml(r.name) + '</option>').join('');
+    if (cur && recipes.some(r => String(r.id) === String(cur))) recipeSelect.value = String(cur);
+    btnDelete.disabled = !recipeSelect.value;
+  }
+  async function fetchRecipes() {
+    try {
+      const r = await fetch('/nutrient-calc/api/recipes', { cache: 'no-store' });
+      recipes = await r.json();
+      renderRecipeOptions();
+    } catch (e) {
+      setStatus('Could not load saved recipes: ' + e.message, 'err');
+    }
+  }
+  recipeSelect.addEventListener('change', () => {
+    const id = recipeSelect.value;
+    btnDelete.disabled = !id;
+    if (!id) return;
+    const r = recipes.find(x => String(x.id) === String(id));
+    if (!r) return;
+    applyState(r.data);
+    recipeName.value = r.name;
+    updateWaterSliderRange();
+    recalc();
+    setStatus('Loaded "' + r.name + '".', 'ok');
+  });
+  btnSave.addEventListener('click', async () => {
+    const name = recipeName.value.trim();
+    if (!name) { setStatus('Enter a name to save.', 'err'); recipeName.focus(); return; }
+    const existing = recipes.find(r => r.name.toLowerCase() === name.toLowerCase());
+    if (existing && !confirm('Overwrite existing recipe "' + existing.name + '"?')) return;
+    btnSave.disabled = true;
+    try {
+      const res = await fetch('/nutrient-calc/api/recipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, data: collectState() }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || 'save failed');
+      await fetchRecipes();
+      renderRecipeOptions(j.id);
+      setStatus(j.updated ? 'Updated "' + j.name + '".' : 'Saved "' + j.name + '".', 'ok');
+    } catch (e) {
+      setStatus('Save failed: ' + e.message, 'err');
+    } finally {
+      btnSave.disabled = false;
+    }
+  });
+  btnDelete.addEventListener('click', async () => {
+    const id = recipeSelect.value;
+    if (!id) return;
+    const r = recipes.find(x => String(x.id) === String(id));
+    if (!r) return;
+    if (!confirm('Delete recipe "' + r.name + '"? This cannot be undone.')) return;
+    btnDelete.disabled = true;
+    try {
+      const res = await fetch('/nutrient-calc/api/recipes/' + id, { method: 'DELETE' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      await fetchRecipes();
+      recipeSelect.value = '';
+      btnDelete.disabled = true;
+      setStatus('Deleted "' + r.name + '".', 'ok');
+    } catch (e) {
+      setStatus('Delete failed: ' + e.message, 'err');
+      btnDelete.disabled = false;
+    }
+  });
 
   // ── Wire up ────────────────────────────────────────────
-  const liveIds = [
-    'waterVol', 'strength', 'massUnit',
-    'doseMB', 'doseEP', 'doseCN',
-    'mbN', 'mbP', 'mbK', 'epMg', 'epS', 'cnN', 'cnCa',
-    'phCurrent', 'phTarget', 'phRate', 'phRateUnit', 'phOutUnit',
-  ];
-  liveIds.forEach(id => {
+  bindSlider('waterVolSlider', 'waterVol', { autoGrow: true });
+  bindSlider('strengthSlider', 'strength', { autoGrow: false });
+
+  // Dose and % inputs trigger recalc
+  ['doseMB', 'doseEP', 'doseCN',
+   'mbN', 'mbP', 'mbK', 'epMg', 'epS', 'cnN', 'cnCa',
+   'phCurrent', 'phTarget', 'phRate', 'phRateUnit', 'phOutUnit'
+  ].forEach(id => {
     const el = $(id);
     el.addEventListener('input', recalc);
     el.addEventListener('change', recalc);
   });
+
+  // Total fields: derive dose from total
+  ['MB', 'EP', 'CN'].forEach(c => {
+    const el = $('total' + c);
+    el.addEventListener('input', () => onTotalEdited(c));
+    el.addEventListener('change', () => onTotalEdited(c));
+  });
+
   $('waterUnit').addEventListener('change', onWaterUnitChange);
+  $('massUnit').addEventListener('change', onMassUnitChange);
   $('btnPresetStandard').addEventListener('click', loadStandardPreset);
 
+  // Strength preset chips
+  document.querySelectorAll('#strengthChips .nc-chip').forEach(ch => {
+    ch.addEventListener('click', () => {
+      $('strength').value = ch.dataset.strength;
+      $('strengthSlider').value = ch.dataset.strength;
+      paintSlider($('strengthSlider'));
+      recalc();
+    });
+  });
+
+  // Restore last-used values
+  const savedState = loadSession();
+  if (savedState) applyState(savedState);
+
+  updateWaterSliderRange();
   recalc();
+  fetchRecipes();
 })();
 </script>
 {% endblock %}

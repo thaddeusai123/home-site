@@ -94,6 +94,13 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_poop_log_occurred ON poop_log(occurred_at);
             CREATE INDEX IF NOT EXISTS idx_poop_signs_kid ON poop_signs(kid_id);
             CREATE INDEX IF NOT EXISTS idx_poop_signs_occurred ON poop_signs(occurred_at);
+            CREATE TABLE IF NOT EXISTS nutrient_recipes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                data        TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            );
         """)
 
 
