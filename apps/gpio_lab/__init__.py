@@ -76,7 +76,7 @@ def _db():
 
 def _ensure_device(pin: int, initial_value: bool):
     if not GPIO_AVAILABLE:
-        raise RuntimeError(f"GPIO library unavailable ({_gpio_error}). Install gpiozero + lgpio on the Pi.")
+        raise RuntimeError(f"GPIO library unavailable ({_gpio_error}). Install gpiozero + rpi-lgpio on the Pi.")
     with _devices_lock:
         dev = _devices.get(pin)
         if dev is None:

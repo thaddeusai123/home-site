@@ -1,4 +1,4 @@
 flask
 waitress
 gpiozero; sys_platform == "linux"
-lgpio; sys_platform == "linux"
+rpi-lgpio; sys_platform == "linux"
