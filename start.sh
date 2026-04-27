@@ -23,4 +23,4 @@ if [ ! -f "$STAMP_FILE" ] || [ "$REQ_FILE" -nt "$STAMP_FILE" ]; then
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting Home Website on $HOST:$PORT"
-exec venv/bin/waitress-serve --host="$HOST" --port="$PORT" --threads=8 app:app
+exec venv/bin/waitress-serve --host="$HOST" --port="$PORT" --threads=16 app:app

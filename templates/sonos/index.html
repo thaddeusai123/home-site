@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+{% block title %}Sonos Control{% endblock %}
+{% block content %}
+<style>
+  .sn-wrap { display: grid; grid-template-columns: 260px 1fr 320px; gap: 16px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 1100px) { .sn-wrap { grid-template-columns: 240px 1fr; } .sn-browse { grid-column: 1 / -1; } }
+  @media (max-width: 768px) { .sn-wrap { grid-template-columns: 1fr; } }
+
+  .sn-card { background: var(--hl-panel); border: 1px solid var(--hl-border); border-radius: 10px; padding: 14px 16px; }
+  .sn-card h3 { margin: 0 0 10px; font-size: 14px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* Speaker list */
+  .sn-speaker { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--hl-border); background: var(--hl-bg-alt); margin-bottom: 8px; cursor: pointer; transition: border-color 120ms; }
+  .sn-speaker:hover { border-color: var(--hl-accent); }
+  .sn-speaker.sn-active { border-color: var(--hl-accent); background: rgba(46,196,182,0.1); }
+  .sn-speaker-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .sn-speaker-name { font-weight: 600; }
+  .sn-speaker-state { font-size: 11px; color: var(--hl-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .sn-speaker-state.sn-playing { color: var(--hl-ok); }
+  .sn-speaker-vol { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .sn-speaker-vol input[type=range] { flex: 1; accent-color: var(--hl-accent); }
+  .sn-speaker-meta { font-size: 11px; color: var(--hl-muted); }
+  .sn-group-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; background: rgba(46,196,182,0.15); color: var(--hl-accent); font-size: 10px; margin-left: 4px; }
+
+  /* Now playing */
+  .sn-np { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: center; }
+  @media (max-width: 600px) { .sn-np { grid-template-columns: 1fr; text-align: center; } }
+  .sn-art { width: 200px; height: 200px; border-radius: 8px; background: var(--hl-bg-alt); border: 1px solid var(--hl-border); object-fit: cover; }
+  .sn-np-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .sn-np-artist { color: var(--hl-muted); margin-bottom: 12px; }
+  .sn-np-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .sn-btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--hl-border); background: var(--hl-panel); color: var(--hl-text); cursor: pointer; font: inherit; }
+  .sn-btn:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
+  .sn-btn-play { background: var(--hl-accent); color: var(--hl-bg); border-color: var(--hl-accent); font-weight: 700; padding: 10px 20px; }
+  .sn-btn-icon { font-size: 18px; padding: 8px 12px; }
+  .sn-progress-row { display: flex; align-items: center; gap: 8px; font-family: var(--hl-mono); font-size: 12px; color: var(--hl-muted); margin-top: 6px; }
+  .sn-progress-row input { flex: 1; accent-color: var(--hl-accent); }
+
+  /* Queue */
+  .sn-queue { max-height: 380px; overflow-y: auto; }
+  .sn-q-item { display: flex; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--hl-border); align-items: center; font-size: 13px; }
+  .sn-q-item:last-child { border-bottom: none; }
+  .sn-q-item.sn-current { background: rgba(46,196,182,0.08); border-left: 3px solid var(--hl-accent); padding-left: 7px; }
+  .sn-q-num { color: var(--hl-muted); min-width: 24px; font-family: var(--hl-mono); }
+  .sn-q-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sn-q-x { background: none; border: none; color: var(--hl-muted); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+  .sn-q-x:hover { color: var(--hl-danger); }
+  .sn-q-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+  /* Browse */
+  .sn-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+  .sn-tab { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--hl-border); background: var(--hl-bg-alt); color: var(--hl-text); cursor: pointer; font-size: 12px; }
+  .sn-tab.sn-active { border-color: var(--hl-accent); color: var(--hl-accent); background: rgba(46,196,182,0.1); }
+  .sn-list { max-height: 360px; overflow-y: auto; }
+  .sn-list-item { padding: 8px 10px; border-bottom: 1px solid var(--hl-border); cursor: pointer; font-size: 13px; }
+  .sn-list-item:hover { background: var(--hl-bg-alt); }
+  .sn-list-item:last-child { border-bottom: none; }
+  .sn-list-sub { color: var(--hl-muted); font-size: 11px; }
+  .sn-input { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--hl-border); background: var(--hl-bg-alt); color: var(--hl-text); font: inherit; box-sizing: border-box; }
+  .sn-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .sn-row .sn-input { flex: 1; }
+
+  /* Status / connection indicator */
+  .sn-status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: rgba(255,179,71,0.15); color: var(--hl-warn); margin-left: 8px; }
+  .sn-status.sn-ok { background: rgba(112,216,132,0.15); color: var(--hl-ok); }
+
+  /* Group editor */
+  .sn-group-list { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
+  .sn-group-list label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+
+  .sn-empty { color: var(--hl-muted); font-style: italic; padding: 12px 0; text-align: center; font-size: 13px; }
+  .sn-toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--hl-panel); border: 1px solid var(--hl-accent); border-radius: 8px; padding: 10px 18px; font-size: 13px; z-index: 1000; opacity: 0; transition: opacity 200ms; pointer-events: none; }
+  .sn-toast.sn-visible { opacity: 1; }
+</style>
+
+<div class="sn-wrap">
+  <!-- LEFT: Speakers -->
+  <section class="sn-card">
+    <h3>Speakers <span class="sn-status" id="snConnStatus">connecting…</span></h3>
+    <div id="snSpeakerList"></div>
+    <button class="sn-btn" id="snRefresh" style="width: 100%; margin-top: 8px;">Re-scan LAN</button>
+    <div style="margin-top: 14px;">
+      <h3>Group with active speaker</h3>
+      <div class="sn-group-list" id="snGroupList"></div>
+    </div>
+  </section>
+
+  <!-- CENTER: Now Playing + Queue -->
+  <section class="sn-card">
+    <h3>Now Playing <span id="snActiveName" style="color: var(--hl-accent); text-transform: none; letter-spacing: 0;"></span></h3>
+    <div class="sn-np">
+      <img id="snArt" class="sn-art" alt="">
+      <div>
+        <div class="sn-np-title" id="snTitle">—</div>
+        <div class="sn-np-artist" id="snArtist"></div>
+        <div class="sn-np-controls">
+          <button class="sn-btn sn-btn-icon" data-act="previous" title="Previous">⏮</button>
+          <button class="sn-btn sn-btn-play" id="snPlayBtn" data-act="play">▶ Play</button>
+          <button class="sn-btn sn-btn-icon" data-act="next" title="Next">⏭</button>
+          <button class="sn-btn sn-btn-icon" id="snMuteBtn" title="Mute">🔊</button>
+        </div>
+        <div class="sn-progress-row">
+          <span id="snPos">0:00</span>
+          <input type="range" id="snSeek" min="0" max="100" value="0">
+          <span id="snDur">0:00</span>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top: 18px;">Queue</h3>
+    <div id="snQueue" class="sn-queue"></div>
+    <div class="sn-q-actions">
+      <button class="sn-btn" id="snQClear">Clear queue</button>
+      <button class="sn-btn" id="snQSave">Save as Sonos Playlist…</button>
+    </div>
+  </section>
+
+  <!-- RIGHT: Browse -->
+  <section class="sn-card sn-browse">
+    <h3>Browse</h3>
+    <div class="sn-tabs">
+      <button class="sn-tab sn-active" data-src="favorites">Favorites</button>
+      <button class="sn-tab" data-src="playlists">Sonos Playlists</button>
+      <button class="sn-tab" data-src="yt">YouTube Music</button>
+      <button class="sn-tab" data-src="url">Paste URL</button>
+    </div>
+    <div id="snBrowsePane"></div>
+  </section>
+</div>
+
+<div class="sn-toast" id="snToast"></div>
+
+<script>
+(function() {
+  "use strict";
+  const API = "/sonos/api";
+
+  // ---- state ----
+  let speakers = [];                  // [{uid, name, ...}]
+  let activeUid = localStorage.getItem("sn-active-uid") || null;
+  let lastSnapshot = {};              // uid -> state snapshot
+  let lastQueue = [];
+  let positionTicker = null;
+  let posStart = 0;                   // ms when current position was reported
+  let posReportedSec = 0;
+  let durSec = 0;
+  let userSeeking = false;
+
+  // ---- DOM refs ----
+  const elSpeakerList = document.getElementById("snSpeakerList");
+  const elGroupList = document.getElementById("snGroupList");
+  const elArt = document.getElementById("snArt");
+  const elTitle = document.getElementById("snTitle");
+  const elArtist = document.getElementById("snArtist");
+  const elPlayBtn = document.getElementById("snPlayBtn");
+  const elMuteBtn = document.getElementById("snMuteBtn");
+  const elActiveName = document.getElementById("snActiveName");
+  const elPos = document.getElementById("snPos");
+  const elDur = document.getElementById("snDur");
+  const elSeek = document.getElementById("snSeek");
+  const elQueue = document.getElementById("snQueue");
+  const elBrowsePane = document.getElementById("snBrowsePane");
+  const elConnStatus = document.getElementById("snConnStatus");
+  const elToast = document.getElementById("snToast");
+
+  // ---- helpers ----
+  function toast(msg) {
+    elToast.textContent = msg;
+    elToast.classList.add("sn-visible");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => elToast.classList.remove("sn-visible"), 2400);
+  }
+  function fmt(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+  function parseTime(str) {
+    if (!str) return 0;
+    const parts = str.split(":").map(Number);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return Number(str) || 0;
+  }
+  async function jpost(path, body) {
+    const r = await fetch(API + path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+    if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.error || `HTTP ${r.status}`); throw new Error(e.error || r.status); }
+    return r.json();
+  }
+  async function jget(path) {
+    const r = await fetch(API + path);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  // ---- speaker list rendering ----
+  function renderSpeakers() {
+    if (!speakers.length) { elSpeakerList.innerHTML = '<div class="sn-empty">No speakers found.</div>'; elGroupList.innerHTML = ''; return; }
+    if (!activeUid || !speakers.find(s => s.uid === activeUid)) {
+      activeUid = speakers[0].uid;
+      localStorage.setItem("sn-active-uid", activeUid);
+    }
+    elSpeakerList.innerHTML = speakers.map(s => {
+      const snap = lastSnapshot[s.uid] || {};
+      const playing = snap.transport_state === "PLAYING";
+      const stateLabel = snap.transport_state ? snap.transport_state.toLowerCase() : "—";
+      const groupBadge = s.group_members.length > 1
+        ? `<span class="sn-group-badge">${s.is_coordinator ? "leads" : "joined"} ${s.group_members.length}</span>` : "";
+      return `
+        <div class="sn-speaker ${s.uid === activeUid ? 'sn-active' : ''}" data-uid="${s.uid}">
+          <div class="sn-speaker-head">
+            <span class="sn-speaker-name">${s.name}${groupBadge}</span>
+            <span class="sn-speaker-state ${playing ? 'sn-playing' : ''}">${stateLabel}</span>
+          </div>
+          <div class="sn-speaker-meta">${s.model || ''}</div>
+          <div class="sn-speaker-vol">
+            <span>🔉</span>
+            <input type="range" min="0" max="100" value="${snap.volume || 0}" data-uid="${s.uid}">
+            <span>${snap.volume || 0}</span>
+          </div>
+        </div>`;
+    }).join("");
+    elSpeakerList.querySelectorAll(".sn-speaker").forEach(div => {
+      div.addEventListener("click", e => {
+        if (e.target.tagName === "INPUT") return;
+        setActive(div.dataset.uid);
+      });
+    });
+    elSpeakerList.querySelectorAll('input[type=range]').forEach(inp => {
+      inp.addEventListener("change", e => {
+        jpost(`/volume/${e.target.dataset.uid}`, {volume: Number(e.target.value)});
+      });
+    });
+    renderGroupList();
+  }
+
+  function renderGroupList() {
+    const active = speakers.find(s => s.uid === activeUid);
+    if (!active) { elGroupList.innerHTML = ''; return; }
+    const coordUid = active.coordinator_uid || active.uid;
+    const coord = speakers.find(s => s.uid === coordUid) || active;
+    const groupMembers = new Set(coord.group_members || [coord.uid]);
+    elGroupList.innerHTML = speakers.map(s => {
+      if (s.uid === coordUid) return `<label><input type="checkbox" checked disabled> <strong>${s.name}</strong> (lead)</label>`;
+      const checked = groupMembers.has(s.uid) ? "checked" : "";
+      return `<label><input type="checkbox" data-uid="${s.uid}" ${checked}> ${s.name}</label>`;
+    }).join("");
+    elGroupList.querySelectorAll('input[type=checkbox]:not([disabled])').forEach(cb => {
+      cb.addEventListener("change", async () => {
+        const members = Array.from(elGroupList.querySelectorAll('input[type=checkbox]:checked'))
+          .map(c => c.dataset.uid).filter(Boolean);
+        await jpost("/group", {coordinator_uid: coordUid, member_uids: members});
+        toast("Group updated");
+      });
+    });
+  }
+
+  function setActive(uid) {
+    activeUid = uid;
+    localStorage.setItem("sn-active-uid", uid);
+    renderSpeakers();
+    refreshActiveState();
+    refreshQueue();
+  }
+
+  // ---- now-playing ----
+  function applySnapshot(snap) {
+    lastSnapshot[snap.uid] = snap;
+    if (snap.uid !== activeUid && snap.coordinator_uid !== activeUid) {
+      // Update peer speaker tile, no center pane refresh.
+      renderSpeakers();
+      return;
+    }
+    const active = speakers.find(s => s.uid === activeUid);
+    elActiveName.textContent = active ? `· ${active.name}` : '';
+    const t = snap.track || {};
+    elTitle.textContent = t.title || "—";
+    elArtist.textContent = [t.artist, t.album].filter(Boolean).join(" · ");
+    elArt.src = t.album_art || "";
+    elArt.style.display = t.album_art ? "" : "none";
+    elPlayBtn.textContent = snap.transport_state === "PLAYING" ? "⏸ Pause" : "▶ Play";
+    elPlayBtn.dataset.act = snap.transport_state === "PLAYING" ? "pause" : "play";
+    elMuteBtn.textContent = snap.mute ? "🔇" : "🔊";
+    posReportedSec = parseTime(t.position);
+    durSec = parseTime(t.duration);
+    posStart = Date.now();
+    elDur.textContent = fmt(durSec);
+    elSeek.max = durSec || 100;
+    if (!userSeeking) { elSeek.value = posReportedSec; elPos.textContent = fmt(posReportedSec); }
+    renderSpeakers();
+  }
+
+  function tickPosition() {
+    if (userSeeking) return;
+    const snap = lastSnapshot[activeUid];
+    if (!snap || snap.transport_state !== "PLAYING") return;
+    const elapsed = (Date.now() - posStart) / 1000;
+    const cur = posReportedSec + elapsed;
+    if (durSec && cur > durSec) return;
+    elPos.textContent = fmt(cur);
+    elSeek.value = Math.floor(cur);
+  }
+
+  // ---- queue ----
+  async function refreshQueue() {
+    if (!activeUid) return;
+    try { lastQueue = await jget(`/queue/${activeUid}`); } catch (e) { lastQueue = []; }
+    renderQueue();
+  }
+  function renderQueue() {
+    if (!lastQueue.length) { elQueue.innerHTML = '<div class="sn-empty">Queue is empty.</div>'; return; }
+    const snap = lastSnapshot[activeUid] || {};
+    const cur = (snap.track && snap.track.playlist_position) ? snap.track.playlist_position - 1 : -1;
+    elQueue.innerHTML = lastQueue.map((t, i) => `
+      <div class="sn-q-item ${i === cur ? 'sn-current' : ''}">
+        <span class="sn-q-num">${i + 1}.</span>
+        <div class="sn-q-title">${escapeHtml(t.title)} <span class="sn-list-sub">— ${escapeHtml(t.creator || '')}</span></div>
+        <button class="sn-q-x" data-idx="${i}" title="Remove">×</button>
+      </div>`).join("");
+    elQueue.querySelectorAll(".sn-q-x").forEach(b => {
+      b.addEventListener("click", async () => {
+        await jpost(`/queue/${activeUid}/remove`, {index: Number(b.dataset.idx)});
+        refreshQueue();
+      });
+    });
+  }
+  function escapeHtml(s) { return (s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // ---- browse pane ----
+  let browseSource = "favorites";
+  function renderBrowse() {
+    elBrowsePane.innerHTML = '<div class="sn-empty">Loading…</div>';
+    if (browseSource === "favorites" || browseSource === "playlists") {
+      jget(`/browse?root=${browseSource}`).then(d => {
+        if (!d.items || !d.items.length) { elBrowsePane.innerHTML = `<div class="sn-empty">Nothing found. Add ${browseSource} in the Sonos S2 app.</div>`; return; }
+        const endpoint = browseSource === "favorites" ? "favorite" : "playlist";
+        elBrowsePane.innerHTML = `<div class="sn-list">${d.items.map(it => `
+          <div class="sn-list-item" data-idx="${it.idx}">
+            <div>${escapeHtml(it.title)}</div>
+            ${it.creator ? `<div class="sn-list-sub">${escapeHtml(it.creator)}</div>` : ''}
+          </div>`).join('')}</div>`;
+        elBrowsePane.querySelectorAll(".sn-list-item").forEach(div => {
+          div.addEventListener("click", async () => {
+            await jpost(`/play/${endpoint}`, {uid: activeUid, idx: Number(div.dataset.idx)});
+            toast("Playing");
+            setTimeout(refreshQueue, 800);
+          });
+        });
+      }).catch(e => { elBrowsePane.innerHTML = `<div class="sn-empty">Browse failed: ${e}</div>`; });
+    } else if (browseSource === "yt") {
+      elBrowsePane.innerHTML = `
+        <div class="sn-row">
+          <input class="sn-input" id="snYtQ" placeholder="Search YouTube Music…">
+          <button class="sn-btn" id="snYtGo">Search</button>
+        </div>
+        <div class="sn-list" id="snYtResults"></div>`;
+      const go = async () => {
+        const q = document.getElementById("snYtQ").value.trim();
+        if (!q) return;
+        const out = document.getElementById("snYtResults");
+        out.innerHTML = '<div class="sn-empty">Searching…</div>';
+        try {
+          const items = await jget(`/ytdlp/search?q=${encodeURIComponent(q)}`);
+          if (items.error) throw new Error(items.error);
+          if (!items.length) { out.innerHTML = '<div class="sn-empty">No results.</div>'; return; }
+          out.innerHTML = items.map(r => `
+            <div class="sn-list-item" data-url="${r.url}">
+              <div>${escapeHtml(r.title)}</div>
+              <div class="sn-list-sub">${escapeHtml(r.artist)} · ${escapeHtml(r.duration || '')}</div>
+            </div>`).join('');
+          out.querySelectorAll(".sn-list-item").forEach(div => {
+            div.addEventListener("click", async () => {
+              toast("Extracting via yt-dlp…");
+              try {
+                const r = await jpost("/ytdlp/play", {uid: activeUid, url: div.dataset.url});
+                toast(`Playing: ${r.title}`);
+              } catch (e) { /* toast already shown */ }
+            });
+          });
+        } catch (e) { out.innerHTML = `<div class="sn-empty">${e.message}</div>`; }
+      };
+      document.getElementById("snYtGo").addEventListener("click", go);
+      document.getElementById("snYtQ").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+    } else if (browseSource === "url") {
+      elBrowsePane.innerHTML = `
+        <p class="sn-list-sub" style="margin: 0 0 8px;">Paste a YouTube / YouTube Music / direct audio URL. yt-dlp will extract a stream.</p>
+        <div class="sn-row">
+          <input class="sn-input" id="snUrl" placeholder="https://music.youtube.com/watch?v=…">
+        </div>
+        <button class="sn-btn sn-btn-play" id="snUrlGo" style="width: 100%;">Play on active speaker</button>`;
+      document.getElementById("snUrlGo").addEventListener("click", async () => {
+        const url = document.getElementById("snUrl").value.trim();
+        if (!url) return;
+        toast("Extracting via yt-dlp…");
+        try {
+          const r = await jpost("/ytdlp/play", {uid: activeUid, url});
+          toast(`Playing: ${r.title || 'stream'}`);
+        } catch (e) { /* toast already shown */ }
+      });
+    }
+  }
+
+  document.querySelectorAll(".sn-tab").forEach(t => t.addEventListener("click", () => {
+    document.querySelectorAll(".sn-tab").forEach(x => x.classList.remove("sn-active"));
+    t.classList.add("sn-active");
+    browseSource = t.dataset.src;
+    renderBrowse();
+  }));
+
+  // ---- transport buttons ----
+  document.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", async () => {
+    if (!activeUid) return;
+    await jpost(`/transport/${activeUid}/${b.dataset.act}`, {});
+  }));
+  elMuteBtn.addEventListener("click", async () => {
+    if (!activeUid) return;
+    const snap = lastSnapshot[activeUid] || {};
+    await jpost(`/volume/${activeUid}`, {mute: !snap.mute});
+  });
+  elSeek.addEventListener("mousedown", () => userSeeking = true);
+  elSeek.addEventListener("touchstart", () => userSeeking = true);
+  elSeek.addEventListener("change", async () => {
+    const sec = Number(elSeek.value);
+    const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+    const pos = `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    await jpost(`/transport/${activeUid}/seek`, {position: pos});
+    userSeeking = false;
+  });
+
+  document.getElementById("snQClear").addEventListener("click", async () => {
+    if (!confirm("Clear the queue?")) return;
+    await jpost(`/queue/${activeUid}/remove`, {clear: true});
+    refreshQueue();
+  });
+  document.getElementById("snQSave").addEventListener("click", async () => {
+    const name = prompt("Save queue as Sonos Playlist:");
+    if (!name) return;
+    await jpost(`/queue/${activeUid}/save`, {name});
+    toast(`Saved “${name}”`);
+  });
+  document.getElementById("snRefresh").addEventListener("click", async () => {
+    elConnStatus.textContent = "scanning…";
+    speakers = await jpost("/speakers/refresh", {});
+    renderSpeakers();
+    refreshActiveState();
+    elConnStatus.textContent = `${speakers.length} found`;
+    elConnStatus.classList.add("sn-ok");
+  });
+
+  // ---- initial load + SSE ----
+  async function refreshActiveState() {
+    if (!activeUid) return;
+    try {
+      const snap = await jget(`/state/${activeUid}`);
+      applySnapshot(snap);
+    } catch (e) {}
+  }
+
+  async function init() {
+    try {
+      speakers = await jget("/speakers");
+      elConnStatus.textContent = `${speakers.length} found`;
+      elConnStatus.classList.add("sn-ok");
+    } catch (e) {
+      speakers = [];
+      elConnStatus.textContent = "discovery failed";
+    }
+    renderSpeakers();
+    refreshActiveState();
+    refreshQueue();
+    renderBrowse();
+
+    // SSE event stream — reconnects automatically on drop.
+    const es = new EventSource(API + "/events/stream");
+    es.onmessage = ev => {
+      try {
+        const m = JSON.parse(ev.data);
+        if (m.type === "topology") {
+          speakers = m.payload.speakers || speakers;
+          renderSpeakers();
+        } else if (m.type === "transport") {
+          applySnapshot(m.payload);
+          if (m.uid === activeUid || m.payload.coordinator_uid === activeUid) refreshQueue();
+        } else if (m.type === "volume") {
+          const snap = lastSnapshot[m.uid] || {uid: m.uid};
+          snap.volume = m.payload.volume; snap.mute = m.payload.mute;
+          lastSnapshot[m.uid] = snap;
+          renderSpeakers();
+          if (m.uid === activeUid) {
+            elMuteBtn.textContent = snap.mute ? "🔇" : "🔊";
+          }
+        }
+      } catch (e) {}
+    };
+    es.onerror = () => { elConnStatus.textContent = "reconnecting…"; elConnStatus.classList.remove("sn-ok"); };
+    es.onopen = () => { elConnStatus.textContent = `live · ${speakers.length}`; elConnStatus.classList.add("sn-ok"); };
+
+    positionTicker = setInterval(tickPosition, 1000);
+  }
+
+  init();
+})();
+</script>
+{% endblock %}

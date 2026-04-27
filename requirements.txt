@@ -1,3 +1,6 @@
 flask
 waitress
 gpiozero; sys_platform == "linux"
+soco
+yt-dlp
+ytmusicapi

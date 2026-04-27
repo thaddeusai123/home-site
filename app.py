@@ -26,6 +26,7 @@ APPS = [
     "apps.poop_tracker",
     "apps.nutrient_calc",
     "apps.gpio_lab",
+    "apps.sonos",
 ]
 
 app = Flask(__name__)
@@ -106,6 +107,17 @@ def init_db():
                 pin         INTEGER PRIMARY KEY,
                 label       TEXT NOT NULL,
                 updated_at  TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS sonos_speakers (
+                uid         TEXT PRIMARY KEY,
+                room_name   TEXT NOT NULL,
+                model       TEXT NOT NULL,
+                ip_address  TEXT NOT NULL,
+                last_seen   TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS sonos_prefs (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );
         """)
 
