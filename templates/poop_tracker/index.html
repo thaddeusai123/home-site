@@ -120,6 +120,21 @@
   }
   .pt-prediction strong { color: var(--hl-accent); }
 
+  /* Cluster threshold control */
+  .pt-cluster-row {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    margin: 6px 0 18px; flex-wrap: wrap; font-size: 13px; color: var(--hl-muted);
+  }
+  .pt-cluster-row label { display: inline-flex; align-items: center; gap: 6px; }
+  .pt-cluster-input {
+    width: 64px; padding: 4px 8px; border-radius: 5px;
+    border: 1px solid var(--hl-border); background: var(--hl-bg-alt);
+    color: var(--hl-text); font-family: var(--hl-mono); font-size: 13px;
+    text-align: center;
+  }
+  .pt-cluster-input:focus { border-color: var(--hl-accent); outline: none; }
+  .pt-cluster-hint { font-size: 11px; color: var(--hl-muted); }
+
   /* Stats grid */
   .pt-stats {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -274,6 +289,16 @@
 
   <!-- Prediction -->
   <div class="pt-prediction" id="ptPrediction"></div>
+
+  <!-- Cluster threshold -->
+  <div class="pt-cluster-row">
+    <label>
+      Cluster threshold:
+      <input type="number" id="ptClusterInput" class="pt-cluster-input" value="2" step="0.5" min="0">
+      <span>h</span>
+    </label>
+    <span class="pt-cluster-hint" id="ptClusterHint">Poops within this window are grouped as one event for gap analysis.</span>
+  </div>
 
   <!-- Stats cards -->
   <div class="pt-stats" id="ptStats"></div>
@@ -515,6 +540,8 @@
     const el = document.getElementById('ptStats');
     const cards = [];
     cards.push({val: stats.count, label: 'Total Poops'});
+    cards.push({val: stats.cluster_count || 0, label: 'Bowel Events'});
+    cards.push({val: stats.avg_cluster_size != null ? stats.avg_cluster_size : '\u2014', label: 'Avg Per Event'});
     cards.push({val: stats.avg_gap_hours != null ? stats.avg_gap_hours + 'h' : '\u2014', label: 'Avg Gap'});
     cards.push({val: stats.hours_since_last != null ? stats.hours_since_last + 'h' : '\u2014', label: 'Since Last'});
     cards.push({val: stats.weekly_avg != null ? stats.weekly_avg : '\u2014', label: 'Per Week'});
@@ -614,11 +641,28 @@
     return el.innerHTML;
   }
 
+  // ── Cluster threshold (persisted in localStorage) ──
+  const CLUSTER_KEY = 'ptClusterHours';
+  const clusterInput = document.getElementById('ptClusterInput');
+  const savedCluster = localStorage.getItem(CLUSTER_KEY);
+  if (savedCluster && clusterInput) clusterInput.value = savedCluster;
+  function getClusterHours() {
+    const v = parseFloat(clusterInput && clusterInput.value);
+    return isFinite(v) && v >= 0 ? v : 2;
+  }
+  if (clusterInput) {
+    clusterInput.addEventListener('change', () => {
+      localStorage.setItem(CLUSTER_KEY, getClusterHours());
+      refresh();
+    });
+  }
+
   // ── Refresh data ──
   async function refresh() {
     if (!activeKid) return;
+    const cluster = getClusterHours();
     const [statsRes, logRes, signsRes] = await Promise.all([
-      fetch(`${API}/stats/${activeKid}`),
+      fetch(`${API}/stats/${activeKid}?cluster=${cluster}`),
       fetch(`${API}/log/${activeKid}`),
       fetch(`${API}/signs/${activeKid}`)
     ]);

@@ -99,6 +99,14 @@ a:hover { text-decoration: underline; }
   background: var(--hl-border);
   margin: 10px 16px;
 }
+.hs-nav-label {
+  padding: 2px 20px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--hl-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
 
 .hs-sidebar-footer {
   padding: 12px 16px;

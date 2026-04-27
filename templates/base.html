@@ -37,6 +37,7 @@
           </a>
         {% endfor %}
         <div class="hs-nav-sep"></div>
+        <div class="hs-nav-label">Admin</div>
         <a href="{{ url_for('feedback.admin_dashboard') }}" {% if current_app_slug == 'feedback' %}class="hs-nav-active"{% endif %}>
           <span class="hs-nav-icon">📥</span> Feedback Manager
         </a>

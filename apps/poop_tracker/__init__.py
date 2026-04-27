@@ -11,6 +11,35 @@ from flask import Blueprint, jsonify, render_template, request
 
 bp = Blueprint("poop_tracker", __name__, url_prefix="/poop-tracker")
 
+# Default cluster threshold — multiple poops within this window are treated as
+# a single bowel "event" for gap and prediction analysis. Otherwise, several
+# poops in a row in the same hour skew the avg gap toward minutes instead of
+# the actual interval between bowel events. Override per-request with ?cluster=N.
+DEFAULT_CLUSTER_HOURS = 2.0
+
+
+def _cluster_times(times: list, threshold_hours: float) -> list[tuple]:
+    """Group consecutive poops within `threshold_hours` of each other into
+    clusters. Returns a list of (start, end, count) tuples — one per cluster,
+    in chronological order."""
+    if not times:
+        return []
+    threshold_secs = threshold_hours * 3600
+    clusters = []
+    cur_start = times[0]
+    cur_end = times[0]
+    cur_count = 1
+    for t in times[1:]:
+        if (t - cur_end).total_seconds() <= threshold_secs:
+            cur_end = t
+            cur_count += 1
+        else:
+            clusters.append((cur_start, cur_end, cur_count))
+            cur_start = cur_end = t
+            cur_count = 1
+    clusters.append((cur_start, cur_end, cur_count))
+    return clusters
+
 APP_META = {
     "slug": "poop-tracker",
     "name": "Poop Tracker",
@@ -162,7 +191,7 @@ def _get_sign_stats(kid_id: int) -> dict:
     }
 
 
-def _get_stats(kid_id: int) -> dict:
+def _get_stats(kid_id: int, cluster_hours: float = DEFAULT_CLUSTER_HOURS) -> dict:
     db = _db()
     with db.connect() as conn:
         rows = conn.execute(
@@ -172,7 +201,9 @@ def _get_stats(kid_id: int) -> dict:
 
     _empty = {"count": 0, "gaps": [], "avg_gap_hours": None, "last_at": None,
               "hours_since_last": None, "daily_counts": {}, "hourly_dist": [0]*24,
-              "predicted_next": None, "warning": False, "weekly_avg": None}
+              "predicted_next": None, "warning": False, "weekly_avg": None,
+              "cluster_count": 0, "avg_cluster_size": None,
+              "cluster_threshold_hours": cluster_hours}
 
     if not rows:
         return {**_empty, "signs": _get_sign_stats(kid_id)}
@@ -191,11 +222,23 @@ def _get_stats(kid_id: int) -> dict:
         return {**_empty, "signs": _get_sign_stats(kid_id)}
 
     now = datetime.now(timezone.utc)
-    gaps_hours = [round((times[i] - times[i-1]).total_seconds() / 3600, 1) for i in range(1, len(times))]
+
+    # Cluster the poops — gap analysis runs on cluster boundaries, not individual poops.
+    clusters = _cluster_times(times, cluster_hours)
+
+    # Inter-cluster gaps: from the END of one cluster to the START of the next.
+    # This reflects actual time between bowel events.
+    gaps_hours = []
+    for i in range(1, len(clusters)):
+        gap = (clusters[i][0] - clusters[i-1][1]).total_seconds() / 3600
+        gaps_hours.append(round(gap, 1))
     avg_gap = round(sum(gaps_hours) / len(gaps_hours), 1) if gaps_hours else None
-    last = times[-1]
-    hours_since = round((now - last).total_seconds() / 3600, 1)
-    predicted_next = (last + timedelta(hours=avg_gap)).isoformat(timespec="minutes") if avg_gap else None
+
+    # "Last" is the end of the most recent cluster — that's when the body
+    # finished its last bowel event.
+    last_cluster_end = clusters[-1][1]
+    hours_since = round((now - last_cluster_end).total_seconds() / 3600, 1)
+    predicted_next = (last_cluster_end + timedelta(hours=avg_gap)).isoformat(timespec="minutes") if avg_gap else None
     warning = bool(avg_gap and hours_since > avg_gap * 1.5)
 
     daily_counts = {}
@@ -213,14 +256,20 @@ def _get_stats(kid_id: int) -> dict:
     else:
         weekly_avg = round(len(times) * 7, 1) if daily_counts else None
 
+    avg_cluster_size = round(len(times) / len(clusters), 2) if clusters else None
+
     sign_stats = _get_sign_stats(kid_id)
 
     return {
         "count": len(times), "gaps": gaps_hours[-20:], "avg_gap_hours": avg_gap,
-        "last_at": last.isoformat(timespec="minutes"), "hours_since_last": hours_since,
+        "last_at": last_cluster_end.isoformat(timespec="minutes"),
+        "hours_since_last": hours_since,
         "daily_counts": dict(sorted(daily_counts.items())[-30:]),
         "hourly_dist": hourly_dist, "predicted_next": predicted_next,
         "warning": warning, "weekly_avg": weekly_avg,
+        "cluster_count": len(clusters),
+        "avg_cluster_size": avg_cluster_size,
+        "cluster_threshold_hours": cluster_hours,
         "signs": sign_stats,
     }
 
@@ -301,7 +350,14 @@ def api_get_log(kid_id):
 
 @bp.route("/api/stats/<int:kid_id>", methods=["GET"])
 def api_get_stats(kid_id):
-    return jsonify(_get_stats(kid_id))
+    cluster_raw = request.args.get("cluster")
+    try:
+        cluster_hours = float(cluster_raw) if cluster_raw else DEFAULT_CLUSTER_HOURS
+    except ValueError:
+        cluster_hours = DEFAULT_CLUSTER_HOURS
+    if cluster_hours < 0:
+        cluster_hours = 0.0
+    return jsonify(_get_stats(kid_id, cluster_hours=cluster_hours))
 
 
 @bp.route("/api/signs", methods=["POST"])
