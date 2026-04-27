@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, render_template, request
 
-from . import govee
+from . import govee, govee_lan
+
+LAN_PREF_PREFIX = "govee_lan_"
 
 bp = Blueprint("iot_manager", __name__, url_prefix="/iot")
 
@@ -51,6 +53,21 @@ def _del_pref(key: str) -> None:
     db = _db()
     with db.connect() as conn:
         conn.execute("DELETE FROM iot_prefs WHERE key = ?", (key,))
+
+
+def _get_lan_ips() -> dict[str, str]:
+    """Return {device_id: ip} for every cached LAN entry."""
+    db = _db()
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT key, value FROM iot_prefs WHERE key LIKE ?",
+            (LAN_PREF_PREFIX + "%",),
+        ).fetchall()
+    return {row["key"][len(LAN_PREF_PREFIX):]: row["value"] for row in rows}
+
+
+def _set_lan_ip(device: str, ip: str) -> None:
+    _set_pref(LAN_PREF_PREFIX + device, ip)
 
 
 # ---------------------------------------------------------------------------
@@ -107,9 +124,27 @@ def list_devices():
     if err:
         return err
     try:
-        return jsonify(govee.list_devices(key))
+        devs = govee.list_devices(key)
     except govee.GoveeError as e:
         return jsonify({"error": str(e)}), 502
+    lan_ips = _get_lan_ips()
+    for d in devs:
+        d["lan_ip"] = lan_ips.get(d.get("device") or "")
+    return jsonify(devs)
+
+
+@bp.route("/govee/api/lan/discover", methods=["POST"])
+def lan_discover():
+    """Multicast scan the local subnet. Caches discovered IPs in iot_prefs
+    keyed by device MAC so subsequent control calls skip the cloud."""
+    try:
+        found = govee_lan.discover()
+    except govee_lan.GoveeLanError as e:
+        return jsonify({"error": str(e)}), 500
+    for entry in found:
+        if entry.get("device") and entry.get("ip"):
+            _set_lan_ip(entry["device"], entry["ip"])
+    return jsonify({"ok": True, "found": found, "count": len(found)})
 
 
 @bp.route("/govee/api/state")
@@ -129,21 +164,41 @@ def get_state():
 
 @bp.route("/govee/api/control", methods=["POST"])
 def control():
+    body = request.get_json(force=True)
+    try:
+        sku      = body["sku"]
+        device   = body["device"]
+        cap_type = body["type"]
+        instance = body["instance"]
+        value    = body["value"]
+    except KeyError as e:
+        return jsonify({"error": f"missing field: {e.args[0]}"}), 400
+
+    # Prefer LAN when we have a cached IP and the capability is LAN-supported.
+    # Govee's cloud refuses to forward commands when its `online` flag is
+    # stale-false, even if the device is happily reachable on the LAN.
+    lan_ip = _get_lan_ips().get(device)
+    setter = govee_lan.lan_setter(cap_type, instance)
+    if lan_ip and setter:
+        try:
+            setter(lan_ip, value)
+            return jsonify({"ok": True, "via": "lan", "ip": lan_ip})
+        except govee_lan.GoveeLanError as e:
+            # LAN failed — fall through to cloud rather than giving up.
+            lan_err = str(e)
+        else:
+            lan_err = None
+    else:
+        lan_err = None
+
     key, err = _require_key()
     if err:
         return err
-    body = request.get_json(force=True)
     try:
-        govee.control(
-            key,
-            body["sku"],
-            body["device"],
-            body["type"],
-            body["instance"],
-            body["value"],
-        )
-    except KeyError as e:
-        return jsonify({"error": f"missing field: {e.args[0]}"}), 400
+        govee.control(key, sku, device, cap_type, instance, value)
     except govee.GoveeError as e:
-        return jsonify({"error": str(e)}), 502
-    return jsonify({"ok": True})
+        msg = f"cloud: {e}"
+        if lan_err:
+            msg = f"lan: {lan_err}; {msg}"
+        return jsonify({"error": msg}), 502
+    return jsonify({"ok": True, "via": "cloud"})

@@ -105,11 +105,17 @@
       <button class="gv-btn gv-btn-primary" id="gvSaveKey">Save</button>
       <button class="gv-btn gv-btn-danger" id="gvClearKey" {% if not api_key_set %}style="display:none"{% endif %}>Clear</button>
       <button class="gv-btn" id="gvRefresh">⟳ Refresh devices</button>
+      <button class="gv-btn" id="gvDiscover" title="Multicast-scan the LAN for Govee devices with LAN Control enabled. Lets us bypass the cloud's stale 'online' flag.">📡 Discover on LAN</button>
       <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--hl-muted);cursor:pointer;">
         <input type="checkbox" id="gvRawToggle"> Show raw state
       </label>
     </div>
     <div id="gvStatus" class="gv-status"></div>
+    <p class="hs-muted" style="font-size:12px;margin-top:8px;margin-bottom:0;">
+      Tip: Govee's cloud often reports lights as "offline" even when they're reachable. Click <em>Discover on LAN</em> once
+      (after enabling <em>LAN Control</em> for each light in the Govee app) — commands then go directly over UDP and
+      bypass the cloud entirely.
+    </p>
   </section>
 
   <div class="gv-group-head">Lights</div>
@@ -180,6 +186,19 @@
 
   $('gvRefresh').addEventListener('click', loadDevices);
 
+  $('gvDiscover').addEventListener('click', async function() {
+    setStatus('Scanning LAN for Govee devices…');
+    try {
+      var data = await api('/iot/govee/api/lan/discover', { method: 'POST' });
+      if (data.count === 0) {
+        setStatus('No LAN-Control devices replied. Enable "LAN Control" per-device in the Govee app, then retry.', 'warn');
+      } else {
+        setStatus('Found ' + data.count + ' device' + (data.count === 1 ? '' : 's') + ' on LAN.', 'ok');
+      }
+      loadDevices();  // re-fetch so cards pick up the new lan_ip
+    } catch (e) { setStatus('Discover failed: ' + e.message, 'err'); }
+  });
+
   // Persist the raw-toggle in localStorage so it survives reloads.
   var rawToggle = $('gvRawToggle');
   rawToggle.checked = localStorage.getItem('gv:showRaw') === '1';
@@ -249,10 +268,19 @@
     bindLightHandlers();
   }
 
-  function pillOnline(online) {
-    if (online === false) return '<span class="gv-pill err">offline</span>';
-    if (online === true)  return '<span class="gv-pill ok">online</span>';
-    return '<span class="gv-pill">unknown</span>';
+  function pillReach(d, st) {
+    var bits = [];
+    if (d.lan_ip) {
+      bits.push('<span class="gv-pill ok" title="' + esc(d.lan_ip) + '">LAN</span>');
+    }
+    if (st && st.online === true) {
+      bits.push('<span class="gv-pill ok">cloud</span>');
+    } else if (st && st.online === false) {
+      bits.push('<span class="gv-pill ' + (d.lan_ip ? 'warn' : 'err') + '">cloud offline</span>');
+    } else {
+      bits.push('<span class="gv-pill">unknown</span>');
+    }
+    return bits.join(' ');
   }
 
   function rawBlock(d, st) {
@@ -284,7 +312,7 @@
     return '<div class="gv-device" data-sku="' + esc(d.sku) + '" data-device="' + esc(d.device) + '">'
       + '<div class="gv-device-head">'
         + '<span class="gv-device-name">' + esc(d.name) + '</span>'
-        + pillOnline(st.online)
+        + pillReach(d, st)
       + '</div>'
       + '<div class="gv-device-meta"><span class="gv-device-sku">' + esc(d.sku) + '</span></div>'
       + '<div class="gv-row">'
@@ -317,7 +345,7 @@
     return '<div class="gv-device">'
       + '<div class="gv-device-head">'
         + '<span class="gv-device-name">' + esc(d.name) + '</span>'
-        + pillOnline(st.online)
+        + pillReach(d, st)
       + '</div>'
       + '<div class="gv-device-meta"><span class="gv-device-sku">' + esc(d.sku) + '</span></div>'
       + '<div class="gv-row">' + leakPill + ' ' + batPill + '</div>'
@@ -331,7 +359,7 @@
     return '<div class="gv-device">'
       + '<div class="gv-device-head">'
         + '<span class="gv-device-name">' + esc(d.name) + '</span>'
-        + pillOnline(st.online)
+        + pillReach(d, st)
       + '</div>'
       + '<div class="gv-device-meta">'
         + '<span class="gv-device-sku">' + esc(d.sku) + '</span>'
