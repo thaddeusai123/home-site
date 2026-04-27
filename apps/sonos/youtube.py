@@ -68,7 +68,8 @@ def extract_audio(url: str) -> dict[str, Any]:
 
 
 def didl_metadata(stream_url: str, title: str, artist: str = "",
-                  album: str = "", art: str = "") -> str:
+                  album: str = "", art: str = "",
+                  protocol_info: str = "http-get:*:audio/mp4:*") -> str:
     """Build a minimal DIDL-Lite XML so the speaker shows track info."""
     e = lambda s: html.escape(s or "", quote=True)
     return (
@@ -82,7 +83,7 @@ def didl_metadata(stream_url: str, title: str, artist: str = "",
         f'<upnp:album>{e(album)}</upnp:album>'
         f'<upnp:albumArtURI>{e(art)}</upnp:albumArtURI>'
         '<upnp:class>object.item.audioItem.musicTrack</upnp:class>'
-        '<res protocolInfo="http-get:*:audio/mpeg:*">'
+        f'<res protocolInfo="{e(protocol_info)}">'
         f'{e(stream_url)}'
         '</res>'
         '</item>'

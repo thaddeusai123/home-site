@@ -56,11 +56,15 @@ def discover(force: bool = False, timeout: int = 5) -> list[soco.SoCo]:
         return list(_speakers.values())
 
 
-def all_speakers() -> list[soco.SoCo]:
+def all_speakers(block: bool = True) -> list[soco.SoCo]:
+    """Return cached speakers. If `block=False`, never trigger an SSDP scan
+    (used by the SSE handler so it doesn't stall for ~5s on a cold cache)."""
     with _lock:
-        if not _speakers:
-            return discover()
-        return list(_speakers.values())
+        if _speakers:
+            return list(_speakers.values())
+    if not block:
+        return []
+    return discover()
 
 
 def get(uid: str) -> soco.SoCo:
@@ -156,7 +160,20 @@ def _abs_art(sp: soco.SoCo, art: str | None) -> str | None:
 def transport(sp: soco.SoCo, action: str, **kw) -> None:
     coord = sp.group.coordinator if sp.group else sp
     if action == "play":
-        coord.play()
+        # Sonos returns UPnP 701 "transition not available" if Play is
+        # invoked with no current AVTransport URI. When the queue has
+        # items, fall through to play_from_queue(0); otherwise let the
+        # caller surface the error.
+        try:
+            coord.play()
+        except Exception:
+            try:
+                if coord.queue_size > 0:
+                    coord.play_from_queue(0)
+                    return
+            except Exception:
+                pass
+            raise
     elif action == "pause":
         coord.pause()
     elif action == "stop":

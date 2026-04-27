@@ -15,7 +15,7 @@ import time
 
 from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
 
-from . import events, sonos_client, youtube
+from . import events, proxy, sonos_client, youtube
 
 bp = Blueprint("sonos", __name__, url_prefix="/sonos")
 
@@ -29,19 +29,31 @@ APP_META = {
 }
 
 
+import threading as _threading
+
 _initialized = False
+_init_lock = _threading.Lock()
 
 
-@bp.before_app_request
-def _lazy_start():
-    global _initialized
-    if _initialized:
-        return
-    _initialized = True
+def _bg_start():
     try:
         events.start()
     except Exception:
         pass
+
+
+@bp.before_app_request
+def _lazy_start():
+    """Kick off discovery + GENA subscriptions on first request, in a
+    background thread so the request itself returns immediately. The first
+    SSE handler previously blocked ~5s on SSDP, which the browser
+    EventSource interpreted as a failed connection and reconnected forever."""
+    global _initialized
+    with _init_lock:
+        if _initialized:
+            return
+        _initialized = True
+    _threading.Thread(target=_bg_start, daemon=True, name="sonos-bg-start").start()
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +106,16 @@ def api_transport(uid, action):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Surface UPnP error codes (e.g. 701 "transition not available"
+        # when the queue is empty) instead of a generic 500.
+        msg = str(e)
+        code = getattr(e, "error_code", None)
+        if code == "701" or "701" in msg:
+            return jsonify({
+                "error": "Nothing to play — queue is empty. Pick something from Browse first.",
+                "upnp_code": "701",
+            }), 409
+        return jsonify({"error": msg}), 500
     return jsonify({"ok": True})
 
 
@@ -233,6 +254,7 @@ def api_ytdlp_search():
 
 @bp.route("/api/ytdlp/play", methods=["POST"])
 def api_ytdlp_play():
+    import os
     body = request.get_json(force=True)
     uid = body.get("uid")
     url = body.get("url")
@@ -248,12 +270,37 @@ def api_ytdlp_play():
         return jsonify({"error": f"yt-dlp failed: {e}"}), 502
     if not info.get("stream_url"):
         return jsonify({"error": "no audio stream extracted"}), 502
+
+    # Wrap the upstream URL in a local LAN proxy so Sonos sees a clean
+    # http://<pi-lan-ip>:<port>/sonos/stream/<token> URL with a sane
+    # Content-Type instead of a signed googlevideo HTTPS URL (which it
+    # often refuses with UPnP 701).
+    token = proxy.register(info["stream_url"], content_type="audio/mp4")
+    pi_ip = proxy.lan_ip_for(sp.ip_address)
+    port = int(os.environ.get("HOMESITE_PORT", 8080))
+    proxied = f"http://{pi_ip}:{port}/sonos/stream/{token}"
+
     meta = youtube.didl_metadata(
-        info["stream_url"], info["title"], info["artist"],
-        info["album"], info["thumbnail"],
+        proxied, info["title"], info["artist"], info["album"], info["thumbnail"],
     )
-    sonos_client.play_uri(sp, info["stream_url"], meta_xml=meta, title=info["title"])
+    try:
+        sonos_client.play_uri(sp, proxied, meta_xml=meta, title=info["title"])
+    except Exception as e:
+        return jsonify({"error": f"speaker rejected stream: {e}"}), 502
     return jsonify({"ok": True, "title": info["title"], "artist": info["artist"]})
+
+
+# ---------------------------------------------------------------------------
+# Stream proxy (Sonos hits this; not for browsers)
+# ---------------------------------------------------------------------------
+
+@bp.route("/stream/<token>")
+def stream_proxy(token):
+    range_header = request.headers.get("Range")
+    gen, headers, status, _ = proxy.stream_response(token, range_header)
+    if gen is None:
+        return Response("not found", status=404)
+    return Response(gen(), status=status, headers=headers, direct_passthrough=True)
 
 
 # ---------------------------------------------------------------------------
@@ -262,33 +309,38 @@ def api_ytdlp_play():
 
 @bp.route("/api/events/stream")
 def api_events_stream():
-    @stream_with_context
+    # Subscribe BEFORE flushing the first byte so any events fired during
+    # the initial topology snapshot don't get lost.
+    q = events.subscribe_client()
+
     def gen():
-        q = events.subscribe_client()
-        # initial snapshot so the client doesn't have to wait for the first event
+        # Bytes (not str) because direct_passthrough=True bypasses Flask's
+        # automatic str→bytes encoding.
+        yield b"retry: 3000\n\n"
         try:
-            speakers = [sonos_client.speaker_summary(s)
-                        for s in sonos_client.all_speakers()]
-            yield "data: " + json.dumps({"type": "topology", "uid": "",
-                                         "payload": {"speakers": speakers}}) + "\n\n"
+            speakers = sonos_client.all_speakers(block=False)
+            payload = {"speakers": [sonos_client.speaker_summary(s) for s in speakers]}
+            yield ("data: " + json.dumps({"type": "topology", "uid": "",
+                                          "payload": payload}) + "\n\n").encode()
         except Exception:
             pass
         try:
             while True:
                 try:
                     msg = q.get(timeout=15)
-                    yield f"data: {msg}\n\n"
+                    yield (f"data: {msg}\n\n").encode()
                 except queue.Empty:
-                    yield ": ping\n\n"   # keepalive
+                    yield b": ping\n\n"   # keepalive comment
         except GeneratorExit:
             pass
         finally:
             events.unsubscribe_client(q)
 
     headers = {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
         "Connection": "keep-alive",
     }
-    return Response(gen(), headers=headers)
+    return Response(stream_with_context(gen()), headers=headers,
+                    direct_passthrough=True)
