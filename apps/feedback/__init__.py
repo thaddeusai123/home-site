@@ -10,6 +10,7 @@ Each item gets a human-friendly ref_id (FB-0001…) for easy reference.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, render_template, request
 
@@ -179,6 +180,84 @@ def delete_item(item_id):
 
 
 # ---------------------------------------------------------------------------
+# Bulk update
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/items/bulk", methods=["POST"])
+def bulk_update():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    status = data.get("status")
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "ids required"}), 400
+    if status not in VALID_STATUSES:
+        return jsonify({"error": "valid status required"}), 400
+
+    db = _db()
+    placeholders = ",".join("?" for _ in ids)
+    with db.connect() as conn:
+        cur = conn.execute(
+            f"UPDATE feedback_items SET status = ?, updated_at = ? "
+            f"WHERE id IN ({placeholders})",
+            [status, db.now_iso()] + list(ids),
+        )
+    return jsonify({"ok": True, "updated": cur.rowcount})
+
+
+# ---------------------------------------------------------------------------
+# Export — page-grouped JSON for batch processing
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/items/export", methods=["GET"])
+def export_items():
+    status_filter = request.args.get("status", "new,in_progress")
+    statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+    if not statuses:
+        return jsonify({"error": "status filter required"}), 400
+
+    placeholders = ",".join("?" for _ in statuses)
+    sql = (
+        f"SELECT * FROM feedback_items WHERE status IN ({placeholders}) "
+        "ORDER BY page_path, id"
+    )
+    db = _db()
+    with db.connect() as conn:
+        rows = [dict(r) for r in conn.execute(sql, statuses).fetchall()]
+
+    pages_map: dict[str, dict] = {}
+    for r in rows:
+        path = r["page_path"]
+        bucket = pages_map.setdefault(path, {
+            "page_path": path,
+            "page_title": r.get("page_title"),
+            "items": [],
+        })
+        if r.get("page_title"):
+            bucket["page_title"] = r["page_title"]
+        try:
+            anns = json.loads(r["annotations"]) if r.get("annotations") else []
+        except (TypeError, ValueError):
+            anns = []
+        bucket["items"].append({
+            "ref_id": r["ref_id"],
+            "title": r["title"],
+            "description": r.get("description"),
+            "priority": r["priority"],
+            "status": r["status"],
+            "created_at": r["created_at"],
+            "annotations": anns,
+        })
+
+    pages = list(pages_map.values())
+    total = sum(len(p["items"]) for p in pages)
+    return jsonify({
+        "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "total_items": total,
+        "pages": pages,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Admin dashboard
 # ---------------------------------------------------------------------------
 
@@ -186,29 +265,18 @@ def delete_item(item_id):
 def admin_dashboard():
     db = _db()
     with db.connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM feedback_items ORDER BY id DESC"
-        ).fetchall()
         counts_rows = conn.execute(
             "SELECT status, COUNT(*) AS cnt FROM feedback_items GROUP BY status"
         ).fetchall()
-
-    items = []
-    for r in rows:
-        d = dict(r)
-        if d.get("annotations"):
-            try:
-                d["annotations"] = json.loads(d["annotations"])
-            except (TypeError, ValueError):
-                d["annotations"] = []
-        else:
-            d["annotations"] = []
-        items.append(d)
+        page_rows = conn.execute(
+            "SELECT DISTINCT page_path FROM feedback_items ORDER BY page_path"
+        ).fetchall()
 
     counts = {r["status"]: r["cnt"] for r in counts_rows}
+    pages = [r["page_path"] for r in page_rows]
     return render_template(
         "feedback/admin.html",
-        items=items,
+        pages=pages,
         counts=counts,
         total=sum(counts.values()),
     )

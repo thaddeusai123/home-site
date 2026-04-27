@@ -1,95 +1,378 @@
 {% extends "base.html" %}
-{% block title %}Feedback inbox{% endblock %}
+{% block title %}Feedback Manager{% endblock %}
 {% block content %}
 
-<section class="hs-card" style="max-width: 1100px;">
-  <h2 style="margin: 0 0 4px;">Feedback inbox</h2>
-  <p class="hs-muted" style="margin: 0 0 16px;">Page-tagged notes filed from the ✎ Feedback button.</p>
-
-  <div class="fb-admin-stats">
-    <div class="fb-admin-stat"><strong>{{ total }}</strong> total</div>
-    <div class="fb-admin-stat"><strong>{{ counts.get('new', 0) }}</strong> new</div>
-    <div class="fb-admin-stat"><strong>{{ counts.get('in_progress', 0) }}</strong> in progress</div>
-    <div class="fb-admin-stat"><strong>{{ counts.get('resolved', 0) }}</strong> resolved</div>
-    <div class="fb-admin-stat"><strong>{{ counts.get('dismissed', 0) }}</strong> dismissed</div>
+<section class="hs-card" style="max-width: 1200px;">
+  <div class="fb-mgr-head">
+    <div>
+      <h2 style="margin: 0 0 4px;">Feedback Manager</h2>
+      <p class="hs-muted" style="margin: 0;">Review, triage, and export page-tagged feedback.</p>
+    </div>
+    <div class="fb-mgr-head-right">
+      <span class="fb-status-pill fb-status-new">{{ counts.get('new', 0) }} new</span>
+      <span class="fb-status-pill fb-status-in_progress">{{ counts.get('in_progress', 0) }} in progress</span>
+      <span class="fb-mgr-total">{{ total }} total</span>
+      <button type="button" class="fb-btn fb-btn-primary" onclick="fbExportForClaude()" title="Copy page-grouped feedback as markdown">
+        📋 Copy for Claude
+      </button>
+    </div>
   </div>
 
-  {% if not items %}
-    <div class="fb-admin-empty">No feedback filed yet. Click the ✎ Feedback button on any page to add some.</div>
-  {% else %}
-    <table class="fb-admin-table">
+  <div class="fb-mgr-filters">
+    <div class="fb-field">
+      <label for="filterPage">Page</label>
+      <select id="filterPage" class="fb-select" onchange="fbApplyFilters()">
+        <option value="">All pages</option>
+        {% for p in pages %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="fb-field">
+      <label for="filterStatus">Status</label>
+      <select id="filterStatus" class="fb-select" onchange="fbApplyFilters()">
+        <option value="">All statuses</option>
+        <option value="new">New</option>
+        <option value="in_progress">In Progress</option>
+        <option value="resolved">Resolved</option>
+        <option value="dismissed">Dismissed</option>
+      </select>
+    </div>
+    <div class="fb-field">
+      <label for="filterPriority">Priority</label>
+      <select id="filterPriority" class="fb-select" onchange="fbApplyFilters()">
+        <option value="">All priorities</option>
+        <option value="urgent">Urgent</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+    <div class="fb-field fb-mgr-search">
+      <label for="filterSearch">Search</label>
+      <input id="filterSearch" type="text" class="fb-input" placeholder="Filter by title, ref, or description…" oninput="fbApplyFilters()">
+    </div>
+  </div>
+
+  <div id="bulkBar" class="fb-mgr-bulk hidden">
+    <span id="bulkCount"></span>
+    <select id="bulkStatus" class="fb-select" style="width:auto;">
+      <option value="new">New</option>
+      <option value="in_progress">In Progress</option>
+      <option value="resolved">Resolved</option>
+      <option value="dismissed">Dismissed</option>
+    </select>
+    <button class="fb-btn fb-btn-primary" onclick="fbBulkUpdate()">Apply</button>
+    <button class="fb-btn fb-btn-warn" onclick="fbBulkDelete()">Delete</button>
+    <button class="fb-btn fb-btn-ghost" onclick="fbClearSelection()">Clear</button>
+  </div>
+
+  <div class="fb-mgr-table-wrap">
+    <table class="fb-mgr-table">
       <thead>
         <tr>
+          <th class="fb-mgr-th-check"><input type="checkbox" id="selectAll" onchange="fbToggleAll(this.checked)"></th>
           <th>Ref</th>
-          <th>Page</th>
           <th>Title</th>
+          <th>Page</th>
           <th>Priority</th>
           <th>Status</th>
-          <th>Created</th>
-          <th></th>
+          <th>Date</th>
         </tr>
       </thead>
-      <tbody>
-        {% for it in items %}
-          <tr data-id="{{ it.id }}">
-            <td class="fb-ref">{{ it.ref_id }}</td>
-            <td class="fb-page">{{ it.page_path }}</td>
-            <td>
-              <div>{{ it.title }}</div>
-              {% if it.description %}
-                <div class="fb-admin-desc">{{ it.description }}</div>
-              {% endif %}
-              {% if it.annotations %}
-                <div class="fb-admin-anns">
-                  {{ it.annotations | length }} annotation{{ '' if it.annotations|length == 1 else 's' }}:
-                  {% for a in it.annotations[:3] %}
-                    <code>{{ a.selector }}</code>{% if not loop.last %}, {% endif %}
-                  {% endfor %}
-                  {% if it.annotations | length > 3 %}…{% endif %}
-                </div>
-              {% endif %}
-            </td>
-            <td><span class="fb-prio-pill fb-prio-{{ it.priority }}">{{ it.priority }}</span></td>
-            <td><span class="fb-status-pill fb-status-{{ it.status }}">{{ it.status.replace('_', ' ') }}</span></td>
-            <td class="fb-page">{{ it.created_at }}</td>
-            <td>
-              <div class="fb-admin-actions">
-                {% if it.status == 'new' %}
-                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'in_progress')">Start</button>
-                {% endif %}
-                {% if it.status in ('new', 'in_progress') %}
-                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'resolved')">Resolve</button>
-                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'dismissed')">Dismiss</button>
-                {% endif %}
-                {% if it.status in ('resolved', 'dismissed') %}
-                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'new')">Reopen</button>
-                {% endif %}
-                <button class="fb-del" onclick="_fbAdminDelete({{ it.id }}, '{{ it.ref_id }}')">Delete</button>
-              </div>
-            </td>
-          </tr>
-        {% endfor %}
+      <tbody id="fbTableBody">
+        <tr><td colspan="7" class="fb-mgr-empty">Loading…</td></tr>
       </tbody>
     </table>
-  {% endif %}
+  </div>
+
+  <div id="emptyState" class="fb-mgr-empty hidden">No feedback items match your filters.</div>
 </section>
 
 <script>
-async function _fbAdminPatch(id, field, value) {
-  var body = {}; body[field] = value;
-  var res = await fetch('/feedback/api/items/' + id, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (res.ok) window.location.reload();
-  else alert('Update failed');
-}
-async function _fbAdminDelete(id, ref) {
-  if (!confirm('Delete ' + ref + '?')) return;
-  var res = await fetch('/feedback/api/items/' + id, { method: 'DELETE' });
-  if (res.ok) window.location.reload();
-  else alert('Delete failed');
-}
+(function() {
+  var _items = [];
+  var _selected = new Set();
+  var _expandedId = null;
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function relTime(dateStr) {
+    if (!dateStr) return '';
+    var d = new Date(dateStr.indexOf('Z') === -1 && dateStr.indexOf('+') === -1 ? dateStr + 'Z' : dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    var diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+    return d.toLocaleDateString();
+  }
+
+  function statusLabel(s) {
+    return ({ new: 'New', in_progress: 'In Progress', resolved: 'Resolved', dismissed: 'Dismissed' })[s] || s;
+  }
+
+  function _toast(msg, kind) {
+    var t = document.getElementById('fb-toast-el') || document.createElement('div');
+    t.id = 'fb-toast-el';
+    t.className = 'fb-toast' + (kind === 'warn' ? ' fb-toast-warn' : kind === 'err' ? ' fb-toast-err' : '');
+    t.textContent = msg;
+    t.style.opacity = '1';
+    if (!t.parentNode) document.body.appendChild(t);
+    setTimeout(function() { t.style.opacity = '0'; }, 3500);
+  }
+
+  async function loadItems() {
+    try {
+      var res = await fetch('/feedback/api/items');
+      _items = await res.json();
+    } catch (e) { _items = []; }
+    fbApplyFilters();
+  }
+
+  function getFiltered() {
+    var page = document.getElementById('filterPage').value;
+    var status = document.getElementById('filterStatus').value;
+    var priority = document.getElementById('filterPriority').value;
+    var search = (document.getElementById('filterSearch').value || '').toLowerCase().trim();
+    return _items.filter(function(it) {
+      if (page && it.page_path !== page) return false;
+      if (status && it.status !== status) return false;
+      if (priority && it.priority !== priority) return false;
+      if (search) {
+        var hay = (it.title || '') + ' ' + (it.ref_id || '') + ' ' + (it.description || '');
+        if (hay.toLowerCase().indexOf(search) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  window.fbApplyFilters = function() {
+    var filtered = getFiltered();
+    var tbody = document.getElementById('fbTableBody');
+    var empty = document.getElementById('emptyState');
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      updateBulkBar();
+      return;
+    }
+    empty.classList.add('hidden');
+    var html = '';
+    filtered.forEach(function(it) {
+      var checked = _selected.has(it.id) ? 'checked' : '';
+      var expanded = _expandedId === it.id ? ' fb-mgr-expanded' : '';
+      html += '<tr class="fb-mgr-row' + expanded + '" data-id="' + it.id + '" onclick="fbToggleDetail(event,' + it.id + ')">'
+        + '<td onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="fbToggleSelect(' + it.id + ')"></td>'
+        + '<td><span class="fb-ref-id">' + esc(it.ref_id) + '</span></td>'
+        + '<td class="fb-mgr-title-cell">' + esc(it.title) + '</td>'
+        + '<td class="fb-mgr-page-cell">' + esc(it.page_path) + '</td>'
+        + '<td><span class="fb-prio-pill fb-prio-' + esc(it.priority) + '">' + esc(it.priority) + '</span></td>'
+        + '<td><span class="fb-status-pill fb-status-' + esc(it.status) + '">' + statusLabel(it.status) + '</span></td>'
+        + '<td class="fb-mgr-date" title="' + esc(it.created_at) + '">' + esc(relTime(it.created_at)) + '</td>'
+        + '</tr>';
+      // Detail row
+      var annHtml = '';
+      if (it.annotations && it.annotations.length) {
+        annHtml = '<div class="fb-mgr-anns"><div class="fb-mgr-anns-head">' + it.annotations.length
+          + ' Annotation' + (it.annotations.length > 1 ? 's' : '') + '</div>';
+        it.annotations.forEach(function(a) {
+          annHtml += '<div class="fb-ann-item">'
+            + '<span class="fb-ann-sel">' + esc(a.selector || '') + '</span>'
+            + '<div class="fb-ann-desc">' + esc(a.desc || '') + '</div>'
+            + '<div class="fb-ann-note">' + esc(a.note || '') + '</div>'
+            + '</div>';
+        });
+        annHtml += '</div>';
+      }
+      html += '<tr class="fb-mgr-detail" data-detail="' + it.id + '">'
+        + '<td colspan="7"><div class="fb-mgr-detail-body">'
+        + (it.page_title ? '<div class="fb-mgr-detail-meta">Title: <span>' + esc(it.page_title) + '</span></div>' : '')
+        + (it.description
+            ? '<div class="fb-mgr-detail-desc">' + esc(it.description) + '</div>'
+            : '<div class="fb-mgr-detail-empty">No description</div>')
+        + '<div class="fb-mgr-detail-actions">'
+        + '<label>Status <select onchange="fbUpdateField(' + it.id + ',\'status\',this.value)">'
+        + ['new','in_progress','resolved','dismissed'].map(function(s) {
+          return '<option value="' + s + '"' + (it.status === s ? ' selected' : '') + '>' + statusLabel(s) + '</option>';
+        }).join('') + '</select></label>'
+        + '<label>Priority <select onchange="fbUpdateField(' + it.id + ',\'priority\',this.value)">'
+        + ['low','medium','high','urgent'].map(function(p) {
+          return '<option value="' + p + '"' + (it.priority === p ? ' selected' : '') + '>' + p + '</option>';
+        }).join('') + '</select></label>'
+        + '<button class="fb-btn fb-btn-warn" onclick="fbDeleteItem(event,' + it.id + ')">Delete</button>'
+        + '</div>'
+        + annHtml
+        + '</div></td></tr>';
+    });
+    tbody.innerHTML = html;
+    updateBulkBar();
+  };
+
+  window.fbToggleDetail = function(e, id) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT' || e.target.tagName === 'LABEL' || e.target.tagName === 'OPTION') return;
+    _expandedId = (_expandedId === id) ? null : id;
+    fbApplyFilters();
+  };
+
+  window.fbToggleSelect = function(id) {
+    if (_selected.has(id)) _selected.delete(id);
+    else _selected.add(id);
+    updateBulkBar();
+  };
+
+  window.fbToggleAll = function(checked) {
+    _selected.clear();
+    if (checked) getFiltered().forEach(function(it) { _selected.add(it.id); });
+    fbApplyFilters();
+  };
+
+  window.fbClearSelection = function() {
+    _selected.clear();
+    var sa = document.getElementById('selectAll'); if (sa) sa.checked = false;
+    fbApplyFilters();
+  };
+
+  function updateBulkBar() {
+    var bar = document.getElementById('bulkBar');
+    var count = document.getElementById('bulkCount');
+    if (_selected.size > 0) {
+      bar.classList.remove('hidden');
+      count.textContent = _selected.size + ' selected';
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+
+  window.fbUpdateField = async function(id, field, value) {
+    var body = {}; body[field] = value;
+    var res = await fetch('/feedback/api/items/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { _toast('Update failed', 'err'); return; }
+    var it = _items.find(function(i) { return i.id === id; });
+    if (it) it[field] = value;
+    fbApplyFilters();
+  };
+
+  window.fbDeleteItem = async function(e, id) {
+    e.stopPropagation();
+    if (!confirm('Delete this feedback item?')) return;
+    var res = await fetch('/feedback/api/items/' + id, { method: 'DELETE' });
+    if (!res.ok) { _toast('Delete failed', 'err'); return; }
+    _items = _items.filter(function(i) { return i.id !== id; });
+    _selected.delete(id);
+    fbApplyFilters();
+    _toast('Deleted');
+  };
+
+  window.fbBulkUpdate = async function() {
+    var ids = Array.from(_selected);
+    if (!ids.length) return;
+    var status = document.getElementById('bulkStatus').value;
+    var res = await fetch('/feedback/api/items/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids, status: status })
+    });
+    if (!res.ok) { _toast('Bulk update failed', 'err'); return; }
+    ids.forEach(function(id) {
+      var it = _items.find(function(i) { return i.id === id; });
+      if (it) it.status = status;
+    });
+    fbClearSelection();
+    _toast('Updated ' + ids.length + ' item' + (ids.length > 1 ? 's' : ''));
+  };
+
+  window.fbBulkDelete = async function() {
+    var ids = Array.from(_selected);
+    if (!ids.length) return;
+    if (!confirm('Delete ' + ids.length + ' feedback item' + (ids.length > 1 ? 's' : '') + '?')) return;
+    var results = await Promise.all(ids.map(function(id) {
+      return fetch('/feedback/api/items/' + id, { method: 'DELETE' });
+    }));
+    var ok = results.filter(function(r) { return r.ok; }).length;
+    _items = _items.filter(function(i) { return !ids.includes(i.id); });
+    fbClearSelection();
+    _toast('Deleted ' + ok + ' item' + (ok !== 1 ? 's' : ''));
+  };
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  }
+
+  function buildExportMarkdown(data) {
+    var lines = [];
+    lines.push('# Home Website — Feedback to Address');
+    lines.push('');
+    lines.push('User-submitted feedback exported from the Home Website feedback system.');
+    lines.push('Items are grouped by page. Work through one page at a time — read the relevant template/route, address all items for that page, then move on.');
+    lines.push('After fixing an item, note the ref ID (e.g. FB-0012) so the admin can mark it resolved.');
+    lines.push('');
+    lines.push('**Exported:** ' + data.exported_at);
+    lines.push('**Total items:** ' + data.total_items + ' across ' + data.pages.length + ' page(s)');
+    lines.push('');
+
+    data.pages.forEach(function(page) {
+      lines.push('---');
+      lines.push('');
+      lines.push('## Page: `' + page.page_path + '`');
+      if (page.page_title) lines.push('**Page title:** ' + page.page_title);
+      lines.push('');
+      page.items.forEach(function(item) {
+        lines.push('### ' + item.ref_id + ': ' + item.title);
+        lines.push('- **Priority:** ' + item.priority);
+        lines.push('- **Status:** ' + item.status);
+        lines.push('- **Date:** ' + item.created_at);
+        if (item.description) {
+          lines.push('');
+          lines.push(item.description);
+        }
+        if (item.annotations && item.annotations.length) {
+          lines.push('');
+          lines.push('**Element Annotations:**');
+          item.annotations.forEach(function(a, i) {
+            lines.push('');
+            lines.push((i + 1) + '. **' + (a.desc || a.selector) + '**');
+            lines.push('   - Selector: `' + a.selector + '`');
+            if (a.rect) lines.push('   - Position: ' + a.rect.x + ',' + a.rect.y + ' · ' + a.rect.w + '×' + a.rect.h + 'px');
+            lines.push('   - Note: ' + a.note);
+          });
+        }
+        lines.push('');
+      });
+    });
+    return lines.join('\n');
+  }
+
+  window.fbExportForClaude = async function() {
+    try {
+      var res = await fetch('/feedback/api/items/export?status=new,in_progress');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      if (!data.total_items) {
+        _toast('No open feedback items to export', 'warn');
+        return;
+      }
+      await copyText(buildExportMarkdown(data));
+      _toast('Copied ' + data.total_items + ' items / ' + data.pages.length + ' pages to clipboard');
+    } catch (e) {
+      _toast('Export failed: ' + e.message, 'err');
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', loadItems);
+})();
 </script>
 {% endblock %}
