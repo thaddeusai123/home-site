@@ -125,6 +125,13 @@ def state_snapshot(sp: soco.SoCo) -> dict[str, Any]:
     except SoCoException:
         vol, mute = 0, False
 
+    # Sonos returns "NOT_IMPLEMENTED" for duration on streams without a
+    # known length (radio, some yt-dlp inputs). Normalize to empty string
+    # so the UI can detect unknown duration cleanly.
+    duration = track.get("duration") or ""
+    if duration == "NOT_IMPLEMENTED":
+        duration = ""
+
     return {
         "uid": sp.uid,
         "coordinator_uid": coord.uid,
@@ -138,7 +145,7 @@ def state_snapshot(sp: soco.SoCo) -> dict[str, Any]:
             "album": track.get("album") or "",
             "album_art": _abs_art(sp, track.get("album_art")),
             "position": track.get("position") or "0:00:00",
-            "duration": track.get("duration") or "0:00:00",
+            "duration": duration,
             "uri": track.get("uri") or "",
             "playlist_position": int(track.get("playlist_position") or 0),
         },

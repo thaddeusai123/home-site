@@ -234,12 +234,25 @@
     renderGroupList();
   }
 
+  let groupBusy = false;
+  let groupSignature = "";   // skip rerender if membership unchanged
+
   function renderGroupList() {
     const active = speakers.find(s => s.uid === activeUid);
-    if (!active) { elGroupList.innerHTML = ''; return; }
+    if (!active) { elGroupList.innerHTML = ''; groupSignature = ""; return; }
     const coordUid = active.coordinator_uid || active.uid;
     const coord = speakers.find(s => s.uid === coordUid) || active;
     const groupMembers = new Set(coord.group_members || [coord.uid]);
+
+    // Cheap signature so SSE topology bursts don't redraw + lose the
+    // checkbox the user just clicked while the join is mid-flight.
+    const sig = activeUid + "|" + coordUid + "|" +
+      speakers.map(s => s.uid).sort().join(",") + "||" +
+      [...groupMembers].sort().join(",");
+    if (sig === groupSignature && !groupBusy) return;
+    if (groupBusy) return;   // hold the visible state until the POST resolves
+    groupSignature = sig;
+
     elGroupList.innerHTML = speakers.map(s => {
       if (s.uid === coordUid) return `<label><input type="checkbox" checked disabled> <strong>${s.name}</strong> (lead)</label>`;
       const checked = groupMembers.has(s.uid) ? "checked" : "";
@@ -247,10 +260,22 @@
     }).join("");
     elGroupList.querySelectorAll('input[type=checkbox]:not([disabled])').forEach(cb => {
       cb.addEventListener("change", async () => {
+        if (groupBusy) return;
+        groupBusy = true;
+        elGroupList.querySelectorAll('input[type=checkbox]').forEach(x => x.disabled = true);
         const members = Array.from(elGroupList.querySelectorAll('input[type=checkbox]:checked'))
           .map(c => c.dataset.uid).filter(Boolean);
-        await jpost("/group", {coordinator_uid: coordUid, member_uids: members});
-        toast("Group updated");
+        try {
+          await jpost("/group", {coordinator_uid: coordUid, member_uids: members});
+          toast("Group updated");
+        } catch (e) { /* toast already shown */ }
+        // Hold the visual state for a moment so the topology event from
+        // the Sonos can settle before we redraw from server truth.
+        setTimeout(() => {
+          groupBusy = false;
+          groupSignature = "";   // force rerender from latest topology
+          renderGroupList();
+        }, 1500);
       });
     });
   }
@@ -284,9 +309,20 @@
     posReportedSec = parseTime(t.position);
     durSec = parseTime(t.duration);
     posStart = Date.now();
-    elDur.textContent = fmt(durSec);
-    elSeek.max = durSec || 100;
-    if (!userSeeking) { elSeek.value = posReportedSec; elPos.textContent = fmt(posReportedSec); }
+    // No known duration → show position only, hide the slider so it
+    // doesn't visually peg full while the counter ticks past it.
+    if (durSec > 0) {
+      elDur.textContent = fmt(durSec);
+      elSeek.style.visibility = "";
+      elSeek.disabled = false;
+      elSeek.max = durSec;
+      if (!userSeeking) { elSeek.value = Math.min(posReportedSec, durSec); elPos.textContent = fmt(posReportedSec); }
+    } else {
+      elDur.textContent = "live";
+      elSeek.style.visibility = "hidden";
+      elSeek.disabled = true;
+      if (!userSeeking) elPos.textContent = fmt(posReportedSec);
+    }
     renderSpeakers();
   }
 
@@ -295,10 +331,12 @@
     const snap = lastSnapshot[activeUid];
     if (!snap || snap.transport_state !== "PLAYING") return;
     const elapsed = (Date.now() - posStart) / 1000;
-    const cur = posReportedSec + elapsed;
-    if (durSec && cur > durSec) return;
+    let cur = posReportedSec + elapsed;
+    if (durSec > 0) {
+      if (cur >= durSec) cur = durSec;
+      elSeek.value = Math.floor(cur);
+    }
     elPos.textContent = fmt(cur);
-    elSeek.value = Math.floor(cur);
   }
 
   // ---- queue ----

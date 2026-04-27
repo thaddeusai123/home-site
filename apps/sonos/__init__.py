@@ -281,7 +281,8 @@ def api_ytdlp_play():
     proxied = f"http://{pi_ip}:{port}/sonos/stream/{token}"
 
     meta = youtube.didl_metadata(
-        proxied, info["title"], info["artist"], info["album"], info["thumbnail"],
+        proxied, info["title"], info["artist"], info["album"],
+        info["thumbnail"], duration=int(info.get("duration") or 0),
     )
     try:
         sonos_client.play_uri(sp, proxied, meta_xml=meta, title=info["title"])

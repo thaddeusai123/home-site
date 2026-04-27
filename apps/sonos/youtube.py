@@ -68,10 +68,17 @@ def extract_audio(url: str) -> dict[str, Any]:
 
 
 def didl_metadata(stream_url: str, title: str, artist: str = "",
-                  album: str = "", art: str = "",
+                  album: str = "", art: str = "", duration: int = 0,
                   protocol_info: str = "http-get:*:audio/mp4:*") -> str:
-    """Build a minimal DIDL-Lite XML so the speaker shows track info."""
+    """Build a minimal DIDL-Lite XML so the speaker shows track info.
+    duration is integer seconds; 0 = unknown."""
     e = lambda s: html.escape(s or "", quote=True)
+    dur_attr = ""
+    if duration and duration > 0:
+        h = duration // 3600
+        m = (duration % 3600) // 60
+        s = duration % 60
+        dur_attr = f' duration="{h}:{m:02d}:{s:02d}.000"'
     return (
         '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" '
         'xmlns:dc="http://purl.org/dc/elements/1.1/" '
@@ -83,7 +90,7 @@ def didl_metadata(stream_url: str, title: str, artist: str = "",
         f'<upnp:album>{e(album)}</upnp:album>'
         f'<upnp:albumArtURI>{e(art)}</upnp:albumArtURI>'
         '<upnp:class>object.item.audioItem.musicTrack</upnp:class>'
-        f'<res protocolInfo="{e(protocol_info)}">'
+        f'<res protocolInfo="{e(protocol_info)}"{dur_attr}>'
         f'{e(stream_url)}'
         '</res>'
         '</item>'
