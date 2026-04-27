@@ -1,0 +1,365 @@
+{% extends "base.html" %}
+{% block title %}Govee · IoT Manager{% endblock %}
+{% block content %}
+<style>
+  .gv-wrap { max-width: 1100px; }
+  .gv-crumb { font-size: 12px; color: var(--hl-muted); margin-bottom: 6px; }
+  .gv-crumb a { color: var(--hl-accent-2); }
+
+  .gv-key-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .gv-input {
+    background: var(--hl-bg-alt); border: 1px solid var(--hl-border);
+    border-radius: 6px; padding: 7px 10px; color: var(--hl-text);
+    font: inherit; flex: 1; min-width: 220px;
+  }
+  .gv-input:focus { outline: none; border-color: var(--hl-accent); }
+  .gv-btn {
+    padding: 7px 14px; border-radius: 6px; border: 1px solid var(--hl-border);
+    background: var(--hl-panel); color: var(--hl-text); cursor: pointer; font: inherit;
+  }
+  .gv-btn:hover { border-color: var(--hl-accent); color: var(--hl-accent); }
+  .gv-btn-primary {
+    background: rgba(46,196,182,0.14);
+    border-color: var(--hl-accent); color: var(--hl-accent); font-weight: 600;
+  }
+  .gv-btn-primary:hover { background: rgba(46,196,182,0.22); }
+  .gv-btn-danger { color: var(--hl-danger); }
+  .gv-btn-danger:hover { border-color: var(--hl-danger); }
+
+  .gv-status { font-size: 13px; color: var(--hl-muted); margin-top: 8px; min-height: 16px; }
+  .gv-status.err { color: var(--hl-danger); }
+  .gv-status.ok  { color: var(--hl-ok); }
+  .gv-status.warn { color: var(--hl-warn); }
+
+  .gv-group-head {
+    font-size: 13px; color: var(--hl-accent); letter-spacing: 0.6px;
+    text-transform: uppercase; font-weight: 700; margin: 22px 0 8px;
+  }
+  .gv-grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+  .gv-empty { color: var(--hl-muted); font-style: italic; padding: 6px 0; }
+
+  .gv-device {
+    background: var(--hl-panel); border: 1px solid var(--hl-border);
+    border-radius: 10px; padding: 14px;
+  }
+  .gv-device-head {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; margin-bottom: 4px;
+  }
+  .gv-device-name { font-weight: 600; font-size: 14px; }
+  .gv-device-meta {
+    font-size: 11px; color: var(--hl-muted); margin-bottom: 10px;
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .gv-device-sku { font-family: var(--hl-mono); }
+
+  .gv-pill {
+    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--hl-border);
+    font-size: 11px; white-space: nowrap;
+  }
+  .gv-pill.ok   { color: var(--hl-ok);     border-color: rgba(112,216,132,0.4); background: rgba(112,216,132,0.08); }
+  .gv-pill.warn { color: var(--hl-warn);   border-color: rgba(255,179,71,0.4);  background: rgba(255,179,71,0.08); }
+  .gv-pill.err  { color: var(--hl-danger); border-color: rgba(227,100,91,0.4);  background: rgba(227,100,91,0.08); }
+
+  .gv-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+
+  .gv-toggle { display: inline-flex; border: 1px solid var(--hl-border); border-radius: 6px; overflow: hidden; }
+  .gv-toggle button {
+    padding: 5px 14px; background: transparent; color: var(--hl-text);
+    border: none; cursor: pointer; font: inherit; font-size: 12px;
+  }
+  .gv-toggle button.active { background: rgba(46,196,182,0.18); color: var(--hl-accent); font-weight: 600; }
+
+  .gv-slider { flex: 1; min-width: 120px; }
+  .gv-slider-val {
+    font-family: var(--hl-mono); font-size: 12px;
+    color: var(--hl-muted); min-width: 40px; text-align: right;
+  }
+  .gv-color-pick {
+    width: 36px; height: 28px; border-radius: 6px;
+    border: 1px solid var(--hl-border); background: transparent; cursor: pointer; padding: 0;
+  }
+</style>
+
+<div class="gv-wrap">
+  <div class="gv-crumb">
+    <a href="{{ url_for('iot_manager.index') }}">IoT Manager</a> &nbsp;/&nbsp; Govee
+  </div>
+
+  <section class="hs-card">
+    <h2>Govee</h2>
+    <p class="hs-muted">
+      Talks to your Govee account via the
+      <a href="https://developer.govee.com/" target="_blank" rel="noopener">Govee Developer API</a>.
+      Generate a key in the Govee app: <em>Profile → About Us → Apply for API Key</em>.
+      Initial provisioning still happens in the app; this page reads device state and sends commands.
+    </p>
+
+    <div class="gv-group-head">API Key</div>
+    <div class="gv-key-row">
+      <input id="gvKey" class="gv-input" type="password" autocomplete="off"
+             placeholder="{{ 'saved — paste a new key to replace, or leave blank' if api_key_set else 'paste API key here' }}">
+      <button class="gv-btn gv-btn-primary" id="gvSaveKey">Save</button>
+      <button class="gv-btn gv-btn-danger" id="gvClearKey" {% if not api_key_set %}style="display:none"{% endif %}>Clear</button>
+      <button class="gv-btn" id="gvRefresh">⟳ Refresh devices</button>
+    </div>
+    <div id="gvStatus" class="gv-status"></div>
+  </section>
+
+  <div class="gv-group-head">Lights</div>
+  <div id="gvLights" class="gv-grid"><div class="gv-empty">{% if api_key_set %}Loading…{% else %}Save an API key to load.{% endif %}</div></div>
+
+  <div class="gv-group-head">Water Sensors</div>
+  <div id="gvWater" class="gv-grid"><div class="gv-empty">{% if api_key_set %}Loading…{% else %}Save an API key to load.{% endif %}</div></div>
+
+  <div class="gv-group-head">Other Devices</div>
+  <div id="gvOther" class="gv-grid"><div class="gv-empty">—</div></div>
+</div>
+
+<script>
+(function() {
+  var apiKeySet = {{ 'true' if api_key_set else 'false' }};
+  var devices = [];
+  var stateBy = {};
+
+  function $(id) { return document.getElementById(id); }
+  function setStatus(msg, kind) {
+    var s = $('gvStatus');
+    s.textContent = msg || '';
+    s.className = 'gv-status' + (kind ? ' ' + kind : '');
+  }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function devKey(d) { return d.sku + '|' + d.device; }
+
+  async function api(path, opts) {
+    var res = await fetch(path, opts || {});
+    var data = await res.json().catch(function() { return {}; });
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+  }
+
+  // ── API key controls ────────────────────────────────────────────────
+  $('gvSaveKey').addEventListener('click', async function() {
+    var k = $('gvKey').value.trim();
+    if (!k) { setStatus('Paste a key first.', 'err'); return; }
+    try {
+      await api('/iot/govee/api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: k })
+      });
+      $('gvKey').value = '';
+      apiKeySet = true;
+      $('gvClearKey').style.display = '';
+      setStatus('API key saved.', 'ok');
+      loadDevices();
+    } catch (e) { setStatus('Save failed: ' + e.message, 'err'); }
+  });
+
+  $('gvClearKey').addEventListener('click', async function() {
+    if (!confirm('Clear the saved Govee API key?')) return;
+    try {
+      await api('/iot/govee/api-key', { method: 'DELETE' });
+      apiKeySet = false;
+      $('gvClearKey').style.display = 'none';
+      devices = []; stateBy = {};
+      render();
+      setStatus('API key cleared.', 'ok');
+    } catch (e) { setStatus('Clear failed: ' + e.message, 'err'); }
+  });
+
+  $('gvRefresh').addEventListener('click', loadDevices);
+
+  // ── Device load + state ─────────────────────────────────────────────
+  async function loadDevices() {
+    if (!apiKeySet) { setStatus('Save an API key first.', 'warn'); return; }
+    setStatus('Loading devices…');
+    try {
+      devices = await api('/iot/govee/api/devices');
+    } catch (e) {
+      setStatus('Failed: ' + e.message, 'err');
+      return;
+    }
+    setStatus(devices.length
+      ? 'Loaded ' + devices.length + ' device' + (devices.length === 1 ? '' : 's') + '. Fetching state…'
+      : 'No devices on this account.', devices.length ? '' : 'warn');
+    render();
+    await Promise.all(devices.map(function(d) {
+      return loadState(d).catch(function() {});
+    }));
+    setStatus('Ready.', 'ok');
+    render();
+  }
+
+  async function loadState(d) {
+    var qs = '?sku=' + encodeURIComponent(d.sku) + '&device=' + encodeURIComponent(d.device);
+    var s = await api('/iot/govee/api/state' + qs);
+    stateBy[devKey(d)] = s;
+  }
+
+  // ── Color helpers ───────────────────────────────────────────────────
+  function intToHex(n) {
+    if (n == null || isNaN(n)) return '#ffffff';
+    var r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+    return '#' + [r, g, b].map(function(v) {
+      return ('0' + v.toString(16)).slice(-2);
+    }).join('');
+  }
+  function hexToInt(h) {
+    var m = (h || '').replace('#', '');
+    if (m.length === 3) m = m.split('').map(function(c) { return c + c; }).join('');
+    var n = parseInt(m, 16);
+    return isNaN(n) ? 0xffffff : n;
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────
+  function render() {
+    var lights = devices.filter(function(d) { return d.category === 'light'; });
+    var water  = devices.filter(function(d) { return d.category === 'water_sensor'; });
+    var other  = devices.filter(function(d) {
+      return d.category !== 'light' && d.category !== 'water_sensor';
+    });
+    $('gvLights').innerHTML = lights.length
+      ? lights.map(renderLight).join('')
+      : '<div class="gv-empty">' + (apiKeySet ? 'No lights on this account.' : 'Save an API key to load.') + '</div>';
+    $('gvWater').innerHTML = water.length
+      ? water.map(renderWater).join('')
+      : '<div class="gv-empty">' + (apiKeySet ? 'No water sensors on this account.' : 'Save an API key to load.') + '</div>';
+    $('gvOther').innerHTML = other.length
+      ? other.map(renderOther).join('')
+      : '<div class="gv-empty">—</div>';
+    bindLightHandlers();
+  }
+
+  function pillOnline(online) {
+    if (online === false) return '<span class="gv-pill err">offline</span>';
+    if (online === true)  return '<span class="gv-pill ok">online</span>';
+    return '<span class="gv-pill">unknown</span>';
+  }
+
+  function renderLight(d) {
+    var k = devKey(d);
+    var st = stateBy[k] || {};
+    var on = st.powerSwitch === 1;
+    var bright = st.brightness != null ? st.brightness : 100;
+    var color = intToHex(st.colorRgb);
+    return '<div class="gv-device" data-sku="' + esc(d.sku) + '" data-device="' + esc(d.device) + '">'
+      + '<div class="gv-device-head">'
+        + '<span class="gv-device-name">' + esc(d.name) + '</span>'
+        + pillOnline(st.online)
+      + '</div>'
+      + '<div class="gv-device-meta"><span class="gv-device-sku">' + esc(d.sku) + '</span></div>'
+      + '<div class="gv-row">'
+        + '<div class="gv-toggle">'
+          + '<button data-action="on"  class="' + (on ? 'active' : '') + '">On</button>'
+          + '<button data-action="off" class="' + (!on ? 'active' : '') + '">Off</button>'
+        + '</div>'
+        + '<input type="color" class="gv-color-pick" data-action="color" value="' + color + '" title="Color">'
+      + '</div>'
+      + '<div class="gv-row">'
+        + '<input type="range" min="1" max="100" value="' + bright + '" class="gv-slider" data-action="bright">'
+        + '<span class="gv-slider-val" data-role="brightval">' + bright + '%</span>'
+      + '</div>'
+    + '</div>';
+  }
+
+  function renderWater(d) {
+    var k = devKey(d);
+    var st = stateBy[k] || {};
+    var battery = st.battery;
+    var leakRaw = st.leak;
+    var leak = leakRaw && (leakRaw === true || leakRaw === 1 || (typeof leakRaw === 'object' && leakRaw.leak));
+    var batPill = battery == null
+      ? ''
+      : '<span class="gv-pill ' + (battery < 20 ? 'err' : battery < 40 ? 'warn' : 'ok') + '">🔋 ' + battery + '%</span>';
+    var leakPill = leak
+      ? '<span class="gv-pill err">💧 LEAK</span>'
+      : '<span class="gv-pill ok">dry</span>';
+    return '<div class="gv-device">'
+      + '<div class="gv-device-head">'
+        + '<span class="gv-device-name">' + esc(d.name) + '</span>'
+        + pillOnline(st.online)
+      + '</div>'
+      + '<div class="gv-device-meta"><span class="gv-device-sku">' + esc(d.sku) + '</span></div>'
+      + '<div class="gv-row">' + leakPill + ' ' + batPill + '</div>'
+    + '</div>';
+  }
+
+  function renderOther(d) {
+    var k = devKey(d);
+    var st = stateBy[k] || {};
+    return '<div class="gv-device">'
+      + '<div class="gv-device-head">'
+        + '<span class="gv-device-name">' + esc(d.name) + '</span>'
+        + pillOnline(st.online)
+      + '</div>'
+      + '<div class="gv-device-meta">'
+        + '<span class="gv-device-sku">' + esc(d.sku) + '</span>'
+        + '<span>' + esc(d.type || '') + '</span>'
+      + '</div>'
+    + '</div>';
+  }
+
+  // ── Light controls ──────────────────────────────────────────────────
+  function bindLightHandlers() {
+    document.querySelectorAll('#gvLights .gv-device').forEach(function(el) {
+      var sku = el.dataset.sku, device = el.dataset.device;
+
+      el.querySelectorAll('button[data-action]').forEach(function(b) {
+        b.addEventListener('click', function() {
+          control(sku, device, 'devices.capabilities.on_off', 'powerSwitch',
+                  b.dataset.action === 'on' ? 1 : 0);
+        });
+      });
+
+      var slider = el.querySelector('[data-action="bright"]');
+      var label  = el.querySelector('[data-role="brightval"]');
+      if (slider && label) {
+        slider.addEventListener('input', function() { label.textContent = slider.value + '%'; });
+        slider.addEventListener('change', function() {
+          control(sku, device, 'devices.capabilities.range', 'brightness',
+                  parseInt(slider.value, 10));
+        });
+      }
+
+      var color = el.querySelector('input[type="color"]');
+      if (color) {
+        color.addEventListener('change', function() {
+          control(sku, device, 'devices.capabilities.color_setting', 'colorRgb',
+                  hexToInt(color.value));
+        });
+      }
+    });
+  }
+
+  async function control(sku, device, type, instance, value) {
+    setStatus('Sending ' + instance + '…');
+    try {
+      await api('/iot/govee/api/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku: sku, device: device, type: type, instance: instance, value: value })
+      });
+      setStatus('Updated ' + instance + '.', 'ok');
+      var d = devices.find(function(x) { return x.sku === sku && x.device === device; });
+      if (d) {
+        await loadState(d).catch(function() {});
+        render();
+      }
+    } catch (e) {
+      setStatus('Control failed: ' + e.message, 'err');
+    }
+  }
+
+  // Auto-load on first page open if a key is already saved.
+  if (apiKeySet) loadDevices();
+})();
+</script>
+{% endblock %}

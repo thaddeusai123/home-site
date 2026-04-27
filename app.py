@@ -27,6 +27,7 @@ APPS = [
     "apps.nutrient_calc",
     "apps.gpio_lab",
     "apps.sonos",
+    "apps.iot_manager",
     "apps.feedback",
 ]
 
@@ -137,6 +138,10 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_feedback_page ON feedback_items(page_path);
             CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback_items(status);
+            CREATE TABLE IF NOT EXISTS iot_prefs (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
         """)
 
 

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}IoT Manager{% endblock %}
+{% block content %}
+<style>
+  .iot-wrap { max-width: 900px; }
+  .iot-section-grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    margin-top: 18px;
+  }
+  .iot-section-card {
+    display: block; padding: 18px; border-radius: 10px;
+    background: var(--hl-panel); border: 1px solid var(--hl-border);
+    text-decoration: none; color: var(--hl-text);
+    transition: border-color 120ms, transform 120ms;
+  }
+  .iot-section-card:hover {
+    border-color: var(--hl-accent);
+    transform: translateY(-2px);
+    text-decoration: none;
+  }
+  .iot-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .iot-section-icon { font-size: 24px; }
+  .iot-section-card h3 { margin: 0; font-size: 16px; }
+  .iot-section-tagline { color: var(--hl-muted); font-size: 13px; margin: 0; }
+  .iot-section-card.disabled { opacity: 0.55; pointer-events: none; }
+</style>
+
+<div class="iot-wrap">
+  <section class="hs-card">
+    <h2>IoT Manager</h2>
+    <p class="hs-muted">
+      Hub for smart-home devices on the local network. Each section talks to a different ecosystem &mdash;
+      pick one to manage devices, view state, and send commands.
+    </p>
+  </section>
+
+  <div class="iot-section-grid">
+    <a class="iot-section-card" href="{{ url_for('iot_manager.govee_page') }}">
+      <div class="iot-section-head">
+        <span class="iot-section-icon">💡</span>
+        <h3>Govee</h3>
+      </div>
+      <p class="iot-section-tagline">Lights and water sensors via the Govee Developer API.</p>
+    </a>
+
+    <div class="iot-section-card disabled">
+      <div class="iot-section-head">
+        <span class="iot-section-icon">📶</span>
+        <h3>Zigbee / Z-Wave</h3>
+      </div>
+      <p class="iot-section-tagline">Coming later — needs a coordinator stick.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
