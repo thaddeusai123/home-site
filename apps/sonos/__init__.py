@@ -336,11 +336,12 @@ def api_events_stream():
         finally:
             events.unsubscribe_client(q)
 
+    # NOTE: must NOT set "Connection" header — PEP 3333 forbids hop-by-hop
+    # headers from a WSGI app and Waitress raises AssertionError otherwise.
     headers = {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
-        "Connection": "keep-alive",
     }
     return Response(stream_with_context(gen()), headers=headers,
                     direct_passthrough=True)
