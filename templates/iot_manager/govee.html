@@ -105,6 +105,9 @@
       <button class="gv-btn gv-btn-primary" id="gvSaveKey">Save</button>
       <button class="gv-btn gv-btn-danger" id="gvClearKey" {% if not api_key_set %}style="display:none"{% endif %}>Clear</button>
       <button class="gv-btn" id="gvRefresh">⟳ Refresh devices</button>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--hl-muted);cursor:pointer;">
+        <input type="checkbox" id="gvRawToggle"> Show raw state
+      </label>
     </div>
     <div id="gvStatus" class="gv-status"></div>
   </section>
@@ -177,6 +180,14 @@
 
   $('gvRefresh').addEventListener('click', loadDevices);
 
+  // Persist the raw-toggle in localStorage so it survives reloads.
+  var rawToggle = $('gvRawToggle');
+  rawToggle.checked = localStorage.getItem('gv:showRaw') === '1';
+  rawToggle.addEventListener('change', function() {
+    localStorage.setItem('gv:showRaw', rawToggle.checked ? '1' : '0');
+    render();
+  });
+
   // ── Device load + state ─────────────────────────────────────────────
   async function loadDevices() {
     if (!apiKeySet) { setStatus('Save an API key first.', 'warn'); return; }
@@ -244,6 +255,26 @@
     return '<span class="gv-pill">unknown</span>';
   }
 
+  function rawBlock(d, st) {
+    if (!rawToggle.checked) return '';
+    var dump = {
+      device_capabilities: d.capabilities,
+      state_capabilities:  st && st.raw,
+      flattened: st && {
+        online: st.online, powerSwitch: st.powerSwitch,
+        brightness: st.brightness, colorRgb: st.colorRgb,
+        battery: st.battery, leak: st.leak,
+      },
+    };
+    return '<details style="margin-top:10px;font-size:11px;">'
+      + '<summary style="cursor:pointer;color:var(--hl-muted);">raw</summary>'
+      + '<pre style="white-space:pre-wrap;word-break:break-word;background:var(--hl-bg-alt);'
+      + 'border:1px solid var(--hl-border);border-radius:6px;padding:8px;'
+      + 'margin:6px 0 0;font-size:11px;line-height:1.4;max-height:280px;overflow:auto;">'
+      + esc(JSON.stringify(dump, null, 2))
+      + '</pre></details>';
+  }
+
   function renderLight(d) {
     var k = devKey(d);
     var st = stateBy[k] || {};
@@ -267,6 +298,7 @@
         + '<input type="range" min="1" max="100" value="' + bright + '" class="gv-slider" data-action="bright">'
         + '<span class="gv-slider-val" data-role="brightval">' + bright + '%</span>'
       + '</div>'
+      + rawBlock(d, st)
     + '</div>';
   }
 
@@ -289,6 +321,7 @@
       + '</div>'
       + '<div class="gv-device-meta"><span class="gv-device-sku">' + esc(d.sku) + '</span></div>'
       + '<div class="gv-row">' + leakPill + ' ' + batPill + '</div>'
+      + rawBlock(d, st)
     + '</div>';
   }
 
@@ -304,6 +337,7 @@
         + '<span class="gv-device-sku">' + esc(d.sku) + '</span>'
         + '<span>' + esc(d.type || '') + '</span>'
       + '</div>'
+      + rawBlock(d, st)
     + '</div>';
   }
 
