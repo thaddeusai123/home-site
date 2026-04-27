@@ -36,6 +36,10 @@
             <span class="hs-nav-icon">{{ a.icon }}</span> {{ a.name }}
           </a>
         {% endfor %}
+        <div class="hs-nav-sep"></div>
+        <a href="{{ url_for('feedback.admin_dashboard') }}" {% if current_app_slug == 'feedback' %}class="hs-nav-active"{% endif %}>
+          <span class="hs-nav-icon">📥</span> Feedback Manager
+        </a>
       </nav>
       <div class="hs-sidebar-footer">
         <button type="button" onclick="openFeedbackModal()" class="hs-feedback-btn" title="Submit feedback or flag a UI issue">
@@ -43,6 +47,9 @@
         </button>
         <button type="button" onclick="copyPromptPrimer(this)" class="hs-primer-btn" title="Copy AI prompt primer to clipboard">
           📋 AI Prompt Primer
+        </button>
+        <button type="button" id="hs-restart-btn" class="hs-restart-btn" title="Restart the Home Website service to pick up code/template changes">
+          ⟳ Restart Service
         </button>
       </div>
     </aside>
@@ -66,7 +73,6 @@
 
       <footer class="hs-footer">
         <span>Home Website · Raspberry Pi · {{ now_year }}</span>
-        <span><a href="{{ url_for('feedback.admin_dashboard') }}">Feedback inbox</a></span>
       </footer>
     </div>
   </div>
@@ -139,6 +145,15 @@
 
   <div id="fbHighlightBox" class="fb-highlight-box hidden"></div>
 
+  <!-- Restart overlay -->
+  <div id="hs-restart-overlay" class="hs-restart-overlay" hidden>
+    <div class="hs-restart-card">
+      <h3>Restarting Home Website…</h3>
+      <p id="hs-restart-status">Sending restart signal…</p>
+      <div class="hs-spinner"></div>
+    </div>
+  </div>
+
   <div id="fbAnnotationPopover" class="fb-popover hidden">
     <div class="fb-pop-sel" id="fbPopoverSelector"></div>
     <div class="fb-pop-desc" id="fbPopoverDesc"></div>
@@ -167,6 +182,54 @@
     // Close sidebar when a nav link is tapped on mobile
     var links = sidebar ? sidebar.querySelectorAll('a') : [];
     links.forEach(function(a) { a.addEventListener('click', close); });
+  })();
+
+  // ── Restart Home Website service ───────────────────────────────────────
+  (function() {
+    var btn = document.getElementById('hs-restart-btn');
+    if (!btn) return;
+    var overlay = document.getElementById('hs-restart-overlay');
+    var status = document.getElementById('hs-restart-status');
+
+    btn.addEventListener('click', async function() {
+      if (!confirm('Restart the Home Website service? The page will be unavailable for a few seconds.')) return;
+      btn.disabled = true;
+      if (overlay) overlay.hidden = false;
+      if (status) status.textContent = 'Sending restart signal…';
+
+      try {
+        var fd = new FormData();
+        fd.append('confirm', 'true');
+        var res = await fetch('/api/system/restart', { method: 'POST', body: fd });
+        var data = await res.json().catch(function() { return {}; });
+        if (!res.ok || !data.ok) {
+          if (status) status.textContent = 'Restart failed: ' + (data.error || 'unknown');
+          btn.disabled = false;
+          return;
+        }
+        if (status) status.textContent = 'Restart scheduled — waiting for service to come back…';
+        await new Promise(function(r) { setTimeout(r, 1500); });
+        var deadline = Date.now() + 45000;
+        while (Date.now() < deadline) {
+          try {
+            var h = await fetch('/healthz', { cache: 'no-store' });
+            if (h.ok) {
+              var body = await h.json().catch(function() { return {}; });
+              if (body.ok) {
+                if (status) status.textContent = 'Back online — reloading…';
+                setTimeout(function() { window.location.reload(); }, 400);
+                return;
+              }
+            }
+          } catch (_) { /* still down */ }
+          await new Promise(function(r) { setTimeout(r, 800); });
+        }
+        if (status) status.textContent = 'Service did not come back in time. Check the Pi.';
+      } catch (e) {
+        if (status) status.textContent = 'Request failed: ' + (e.message || e);
+      }
+      btn.disabled = false;
+    });
   })();
 
   {% raw %}
