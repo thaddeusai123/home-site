@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Feedback inbox{% endblock %}
+{% block content %}
+
+<section class="hs-card" style="max-width: 1100px;">
+  <h2 style="margin: 0 0 4px;">Feedback inbox</h2>
+  <p class="hs-muted" style="margin: 0 0 16px;">Page-tagged notes filed from the ✎ Feedback button.</p>
+
+  <div class="fb-admin-stats">
+    <div class="fb-admin-stat"><strong>{{ total }}</strong> total</div>
+    <div class="fb-admin-stat"><strong>{{ counts.get('new', 0) }}</strong> new</div>
+    <div class="fb-admin-stat"><strong>{{ counts.get('in_progress', 0) }}</strong> in progress</div>
+    <div class="fb-admin-stat"><strong>{{ counts.get('resolved', 0) }}</strong> resolved</div>
+    <div class="fb-admin-stat"><strong>{{ counts.get('dismissed', 0) }}</strong> dismissed</div>
+  </div>
+
+  {% if not items %}
+    <div class="fb-admin-empty">No feedback filed yet. Click the ✎ Feedback button on any page to add some.</div>
+  {% else %}
+    <table class="fb-admin-table">
+      <thead>
+        <tr>
+          <th>Ref</th>
+          <th>Page</th>
+          <th>Title</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+          <tr data-id="{{ it.id }}">
+            <td class="fb-ref">{{ it.ref_id }}</td>
+            <td class="fb-page">{{ it.page_path }}</td>
+            <td>
+              <div>{{ it.title }}</div>
+              {% if it.description %}
+                <div class="fb-admin-desc">{{ it.description }}</div>
+              {% endif %}
+              {% if it.annotations %}
+                <div class="fb-admin-anns">
+                  {{ it.annotations | length }} annotation{{ '' if it.annotations|length == 1 else 's' }}:
+                  {% for a in it.annotations[:3] %}
+                    <code>{{ a.selector }}</code>{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                  {% if it.annotations | length > 3 %}…{% endif %}
+                </div>
+              {% endif %}
+            </td>
+            <td><span class="fb-prio-pill fb-prio-{{ it.priority }}">{{ it.priority }}</span></td>
+            <td><span class="fb-status-pill fb-status-{{ it.status }}">{{ it.status.replace('_', ' ') }}</span></td>
+            <td class="fb-page">{{ it.created_at }}</td>
+            <td>
+              <div class="fb-admin-actions">
+                {% if it.status == 'new' %}
+                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'in_progress')">Start</button>
+                {% endif %}
+                {% if it.status in ('new', 'in_progress') %}
+                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'resolved')">Resolve</button>
+                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'dismissed')">Dismiss</button>
+                {% endif %}
+                {% if it.status in ('resolved', 'dismissed') %}
+                  <button onclick="_fbAdminPatch({{ it.id }}, 'status', 'new')">Reopen</button>
+                {% endif %}
+                <button class="fb-del" onclick="_fbAdminDelete({{ it.id }}, '{{ it.ref_id }}')">Delete</button>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+
+<script>
+async function _fbAdminPatch(id, field, value) {
+  var body = {}; body[field] = value;
+  var res = await fetch('/feedback/api/items/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (res.ok) window.location.reload();
+  else alert('Update failed');
+}
+async function _fbAdminDelete(id, ref) {
+  if (!confirm('Delete ' + ref + '?')) return;
+  var res = await fetch('/feedback/api/items/' + id, { method: 'DELETE' });
+  if (res.ok) window.location.reload();
+  else alert('Delete failed');
+}
+</script>
+{% endblock %}

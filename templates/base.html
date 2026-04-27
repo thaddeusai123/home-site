@@ -31,13 +31,16 @@
         <a href="{{ url_for('landing') }}" {% if not current_app_slug %}class="hs-nav-active"{% endif %}>
           <span class="hs-nav-icon">🏠</span> Home
         </a>
-        {% for a in registered_apps %}
+        {% for a in registered_apps if not a.get('hidden') %}
           <a href="{{ url_for(a.url_endpoint) }}" {% if current_app_slug == a.slug %}class="hs-nav-active"{% endif %}>
             <span class="hs-nav-icon">{{ a.icon }}</span> {{ a.name }}
           </a>
         {% endfor %}
       </nav>
       <div class="hs-sidebar-footer">
+        <button type="button" onclick="openFeedbackModal()" class="hs-feedback-btn" title="Submit feedback or flag a UI issue">
+          ✎ Feedback<span id="fbStowBadge" class="fb-stow-badge hidden">0</span>
+        </button>
         <button type="button" onclick="copyPromptPrimer(this)" class="hs-primer-btn" title="Copy AI prompt primer to clipboard">
           📋 AI Prompt Primer
         </button>
@@ -63,7 +66,86 @@
 
       <footer class="hs-footer">
         <span>Home Website · Raspberry Pi · {{ now_year }}</span>
+        <span><a href="{{ url_for('feedback.admin_dashboard') }}">Feedback inbox</a></span>
       </footer>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ FEEDBACK MODAL ══ -->
+  <div id="feedbackModal" class="fb-modal hidden">
+    <div class="fb-card">
+      <div class="fb-head">
+        <h2>Submit Feedback <small>(Home Website)</small></h2>
+        <button class="fb-close" onclick="closeFeedbackModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="fb-body">
+        <div class="fb-field">
+          <label for="fbTitle">Title *</label>
+          <input id="fbTitle" type="text" class="fb-input" placeholder="Brief summary of the issue or request">
+        </div>
+        <div class="fb-field">
+          <label for="fbDescription">Description</label>
+          <textarea id="fbDescription" rows="4" class="fb-textarea" placeholder="Steps to reproduce, expected vs actual, or improvement details..."></textarea>
+        </div>
+        <div class="fb-row">
+          <div class="fb-field">
+            <label for="fbPriority">Priority</label>
+            <select id="fbPriority" class="fb-select">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+        </div>
+        <div class="fb-annotate-row">
+          <button type="button" class="fb-btn" onclick="_fbStartAnnotation()">✎ Annotate Elements</button>
+          <span>Click elements on the page to attach notes</span>
+        </div>
+        <div id="fbAnnotationsList" class="fb-annotations-wrap hidden">
+          <div class="fb-annotations-head">
+            <span>Element Annotations</span>
+            <span id="fbAnnotationsCount"></span>
+          </div>
+          <div id="fbAnnotationsItems"></div>
+        </div>
+        <div id="fbStowedPanel" class="fb-stowed-wrap hidden">
+          <div class="fb-stowed-head">
+            <span>Stowed Feedback</span>
+            <span style="text-transform:none;font-weight:400">Will be saved as separate items</span>
+          </div>
+          <div id="fbStowedList"></div>
+        </div>
+      </div>
+      <div class="fb-foot">
+        <button class="fb-btn fb-btn-ghost" onclick="closeFeedbackModal()">Cancel</button>
+        <button class="fb-btn fb-btn-warn" id="fbStowBtn" onclick="_fbStow()" title="Stow this item and keep browsing — submit all at once later">Stow</button>
+        <button class="fb-btn fb-btn-primary" id="fbSubmitBtn" onclick="_fbSubmit()">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fbAnnotationBar" class="fb-annotation-bar hidden">
+    <div class="fb-bar-left">
+      <span class="fb-bar-title">Annotation Mode</span>
+      <span class="fb-bar-hint">Hover to inspect · Click to annotate</span>
+    </div>
+    <div class="fb-bar-right">
+      <span id="fbAnnotationBarCount" class="fb-bar-count"></span>
+      <button class="fb-btn fb-btn-primary" onclick="_fbEndAnnotation()">Done</button>
+      <button class="fb-btn fb-btn-ghost" onclick="_fbCancelAnnotation()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="fbHighlightBox" class="fb-highlight-box hidden"></div>
+
+  <div id="fbAnnotationPopover" class="fb-popover hidden">
+    <div class="fb-pop-sel" id="fbPopoverSelector"></div>
+    <div class="fb-pop-desc" id="fbPopoverDesc"></div>
+    <textarea id="fbPopoverText" rows="3" placeholder="What should change here?"></textarea>
+    <div class="fb-pop-btns">
+      <button class="fb-btn fb-btn-primary" onclick="_fbSaveAnnotationPopover()">Save</button>
+      <button class="fb-btn fb-btn-ghost" onclick="_fbCancelAnnotationPopover()">Cancel</button>
     </div>
   </div>
 
@@ -86,6 +168,481 @@
     var links = sidebar ? sidebar.querySelectorAll('a') : [];
     links.forEach(function(a) { a.addEventListener('click', close); });
   })();
+
+  {% raw %}
+  // ── Feedback system (local SQLite via /feedback/api/items) ─────────────
+  (function() {
+      var _stowedItems = [];
+      var _annotations = [];
+      var _badgeEls = [];
+      var _annotationMode = false;
+      var _pendingEl = null;
+      var _pendingSelector = '';
+      var _pendingDesc = '';
+      var _editingIndex = -1;
+
+      function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+      function _selector(el) {
+          if (!el || el === document.body || el === document.documentElement) return 'body';
+          if (el.id && !/^\d/.test(el.id)) return '#' + el.id;
+          var parts = [];
+          var cur = el;
+          var limit = 5;
+          while (cur && cur !== document.body && limit-- > 0) {
+              var part = cur.tagName.toLowerCase();
+              if (cur.id && !/^\d/.test(cur.id)) { parts.unshift('#' + cur.id); break; }
+              if (cur.dataset && cur.dataset.id) part += '[data-id="' + cur.dataset.id + '"]';
+              else {
+                  var stable = Array.from(cur.classList).filter(function(c) { return !c.includes(':') && c.length < 30; }).slice(0, 2);
+                  if (stable.length) part += '.' + stable.join('.');
+              }
+              parts.unshift(part);
+              cur = cur.parentElement;
+          }
+          return parts.join(' > ') || el.tagName.toLowerCase();
+      }
+
+      function _describe(el) {
+          var tag = el.tagName.toLowerCase();
+          var id = el.id ? '#' + el.id : '';
+          var cls = Array.from(el.classList).filter(function(c) { return !c.includes(':') && c.length < 30; }).slice(0, 3).join(' ');
+          var text = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+          var label = tag + (id || (cls ? '.' + cls.split(' ')[0] : ''));
+          return text ? label + ' — "' + text + '"' : label;
+      }
+
+      function _xpath(el) {
+          if (!el || el.nodeType !== 1) return '';
+          if (el === document.body) return '/html/body';
+          var parts = [];
+          var cur = el;
+          while (cur && cur.nodeType === 1 && cur !== document.documentElement) {
+              var ix = 1;
+              var sib = cur.previousElementSibling;
+              while (sib) {
+                  if (sib.tagName === cur.tagName) ix++;
+                  sib = sib.previousElementSibling;
+              }
+              parts.unshift(cur.tagName.toLowerCase() + '[' + ix + ']');
+              cur = cur.parentElement;
+          }
+          return '/html/' + parts.join('/');
+      }
+
+      // ── Annotation mode ────────────────────────────────────────────────
+      window._fbStartAnnotation = function() {
+          _annotationMode = true;
+          var modal = document.getElementById('feedbackModal');
+          if (modal) modal.classList.add('hidden');
+          var bar = document.getElementById('fbAnnotationBar');
+          if (bar) bar.classList.remove('hidden');
+          _updateBarCount();
+          document.addEventListener('mousemove', _fbOnMouseMove, { passive: true });
+          document.addEventListener('click', _fbOnClick, true);
+          _fbRenderBadges();
+          document.addEventListener('scroll', _fbUpdateBadgePositions, { passive: true, capture: true });
+          window.addEventListener('resize', _fbUpdateBadgePositions, { passive: true });
+      };
+
+      window._fbEndAnnotation = function() {
+          _annotationMode = false;
+          _removeHighlight();
+          _hideAnnotationPopover();
+          var bar = document.getElementById('fbAnnotationBar');
+          if (bar) bar.classList.add('hidden');
+          document.removeEventListener('mousemove', _fbOnMouseMove);
+          document.removeEventListener('click', _fbOnClick, true);
+          document.removeEventListener('scroll', _fbUpdateBadgePositions, true);
+          window.removeEventListener('resize', _fbUpdateBadgePositions);
+          _fbRemoveBadges();
+          var modal = document.getElementById('feedbackModal');
+          if (modal) modal.classList.remove('hidden');
+          _renderAnnotationsList();
+      };
+
+      window._fbCancelAnnotation = function() { _fbEndAnnotation(); };
+
+      function _fbOnMouseMove(e) {
+          if (!_annotationMode) return;
+          var popover = document.getElementById('fbAnnotationPopover');
+          if (popover && !popover.classList.contains('hidden')) return;
+          var el = document.elementFromPoint(e.clientX, e.clientY);
+          if (!el || el.closest('#fbAnnotationBar') || el.closest('#fbHighlightBox') || el.closest('#fbAnnotationPopover')) return;
+          var box = document.getElementById('fbHighlightBox');
+          if (!box) return;
+          var sel = _selector(el);
+          var isAnnotated = _annotations.some(function(a) { return a.selector === sel; });
+          box.style.outline = isAnnotated ? '2px solid rgba(255,179,71,0.9)' : '2px solid rgba(46,196,182,0.85)';
+          box.style.background = isAnnotated ? 'rgba(255,179,71,0.08)' : 'rgba(46,196,182,0.07)';
+          var rect = el.getBoundingClientRect();
+          box.style.left   = rect.left   + 'px';
+          box.style.top    = rect.top    + 'px';
+          box.style.width  = rect.width  + 'px';
+          box.style.height = rect.height + 'px';
+          box.classList.remove('hidden');
+      }
+
+      function _fbOnClick(e) {
+          if (!_annotationMode) return;
+          if (e.target.closest('#fbAnnotationBar') || e.target.closest('#fbAnnotationPopover') || e.target.closest('#fbHighlightBox')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          var el = document.elementFromPoint(e.clientX, e.clientY);
+          if (!el || el.closest('#fbAnnotationBar') || el.closest('#fbAnnotationPopover')) return;
+          _pendingEl = el;
+          _pendingSelector = _selector(el);
+          _pendingDesc = _describe(el);
+          _editingIndex = -1;
+          for (var i = 0; i < _annotations.length; i++) {
+              if (_annotations[i].selector === _pendingSelector) { _editingIndex = i; break; }
+          }
+          _showAnnotationPopover(e.clientX, e.clientY, _editingIndex >= 0 ? _annotations[_editingIndex].note : '');
+      }
+
+      function _showAnnotationPopover(x, y, existingText) {
+          var pop = document.getElementById('fbAnnotationPopover');
+          if (!pop) return;
+          document.getElementById('fbPopoverSelector').textContent = _pendingSelector;
+          document.getElementById('fbPopoverDesc').textContent = _pendingDesc;
+          var txt = document.getElementById('fbPopoverText');
+          txt.value = existingText || '';
+          var pw = 320, ph = 200;
+          var vw = window.innerWidth, vh = window.innerHeight;
+          var left = x + 16;
+          if (left + pw > vw - 12) left = x - pw - 16;
+          if (left < 8) left = 8;
+          var top = y;
+          if (top + ph > vh - 12) top = vh - ph - 12;
+          if (top < 8) top = 8;
+          pop.style.left = left + 'px';
+          pop.style.top  = top  + 'px';
+          pop.classList.remove('hidden');
+          setTimeout(function() { txt.focus(); }, 40);
+      }
+
+      function _hideAnnotationPopover() {
+          var pop = document.getElementById('fbAnnotationPopover');
+          if (pop) pop.classList.add('hidden');
+      }
+
+      window._fbSaveAnnotationPopover = function() {
+          var txt = document.getElementById('fbPopoverText');
+          var note = txt ? txt.value.trim() : '';
+          if (!note) { _hideAnnotationPopover(); return; }
+          var snippet = '';
+          var rect = null;
+          var extra = { tag: '', id: '', classes: [], xpath: '' };
+          if (_pendingEl) {
+              snippet = (_pendingEl.outerHTML || '').slice(0, 2000);
+              var r = _pendingEl.getBoundingClientRect();
+              rect = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), vw: window.innerWidth, vh: window.innerHeight };
+              extra.tag = _pendingEl.tagName ? _pendingEl.tagName.toLowerCase() : '';
+              extra.id = _pendingEl.id || '';
+              extra.classes = _pendingEl.classList ? Array.from(_pendingEl.classList) : [];
+              extra.xpath = _xpath(_pendingEl);
+          }
+          if (_editingIndex >= 0) {
+              _annotations[_editingIndex].note = note;
+              if (rect) _annotations[_editingIndex].rect = rect;
+              _annotations[_editingIndex].outer_html = snippet;
+              _annotations[_editingIndex].tag = extra.tag;
+              _annotations[_editingIndex].id = extra.id;
+              _annotations[_editingIndex].classes = extra.classes;
+              _annotations[_editingIndex].xpath = extra.xpath;
+          } else {
+              _annotations.push({
+                  selector: _pendingSelector, desc: _pendingDesc,
+                  outer_html: snippet, note: note, rect: rect,
+                  tag: extra.tag, id: extra.id, classes: extra.classes,
+                  xpath: extra.xpath
+              });
+          }
+          _hideAnnotationPopover();
+          _updateBarCount();
+          _fbRenderBadges();
+      };
+
+      window._fbCancelAnnotationPopover = function() { _hideAnnotationPopover(); };
+
+      function _fbRemoveBadges() {
+          _badgeEls.forEach(function(b) { if (b.parentNode) b.parentNode.removeChild(b); });
+          _badgeEls = [];
+      }
+
+      function _fbPositionBadge(badge, el) {
+          var rect = el.getBoundingClientRect();
+          badge.style.left = Math.max(0, rect.right - 14) + 'px';
+          badge.style.top  = Math.max(0, rect.top  - 10) + 'px';
+      }
+
+      function _fbUpdateBadgePositions() {
+          _annotations.forEach(function(a, i) {
+              var badge = _badgeEls[i];
+              if (!badge) return;
+              var el = null;
+              try { el = document.querySelector(a.selector); } catch(e) {}
+              if (!el) { badge.style.opacity = '0'; return; }
+              badge.style.opacity = '1';
+              _fbPositionBadge(badge, el);
+          });
+      }
+
+      function _fbRenderBadges() {
+          _fbRemoveBadges();
+          _annotations.forEach(function(a, i) {
+              var badge = document.createElement('div');
+              badge.title = '#' + (i + 1) + ': ' + a.note;
+              badge.style.cssText = 'position:fixed;z-index:1098;width:18px;height:18px;border-radius:50%;background:#2ec4b6;color:#0a1418;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;pointer-events:none;font-family:ui-monospace,monospace;border:1.5px solid rgba(255,255,255,0.25);box-shadow:0 1px 6px rgba(0,0,0,0.7)';
+              badge.textContent = String(i + 1);
+              document.body.appendChild(badge);
+              _badgeEls.push(badge);
+              var el = null;
+              try { el = document.querySelector(a.selector); } catch(e) {}
+              if (el) _fbPositionBadge(badge, el);
+              else { badge.style.left = '-9999px'; badge.style.top = '-9999px'; }
+          });
+      }
+
+      function _removeHighlight() {
+          var box = document.getElementById('fbHighlightBox');
+          if (box) box.classList.add('hidden');
+      }
+
+      function _updateBarCount() {
+          var el = document.getElementById('fbAnnotationBarCount');
+          if (el) el.textContent = _annotations.length ? _annotations.length + ' annotation' + (_annotations.length !== 1 ? 's' : '') : '';
+      }
+
+      function _renderAnnotationsList() {
+          var wrap = document.getElementById('fbAnnotationsList');
+          var items = document.getElementById('fbAnnotationsItems');
+          var count = document.getElementById('fbAnnotationsCount');
+          if (!wrap || !items) return;
+          if (!_annotations.length) { wrap.classList.add('hidden'); return; }
+          wrap.classList.remove('hidden');
+          if (count) count.textContent = _annotations.length + ' annotation' + (_annotations.length !== 1 ? 's' : '');
+          items.innerHTML = _annotations.map(function(a, i) {
+              return '<div class="fb-ann-item">' +
+                  '<div class="fb-ann-row">' +
+                      '<span class="fb-ann-sel">' + _esc(a.selector) + '</span>' +
+                      '<div class="fb-ann-row-actions">' +
+                          '<button onclick="_fbEditAnnotation(' + i + ')" title="Edit">edit</button>' +
+                          '<button class="fb-del" onclick="_fbRemoveAnnotation(' + i + ')" title="Remove">&times;</button>' +
+                      '</div>' +
+                  '</div>' +
+                  '<div class="fb-ann-desc">' + _esc(a.desc) + '</div>' +
+                  '<div class="fb-ann-note">' + _esc(a.note) + '</div>' +
+              '</div>';
+          }).join('');
+      }
+
+      window._fbRemoveAnnotation = function(i) {
+          _annotations.splice(i, 1);
+          _renderAnnotationsList();
+          if (_annotationMode) _fbRenderBadges();
+      };
+
+      window._fbEditAnnotation = function(i) {
+          _editingIndex = i;
+          _pendingSelector = _annotations[i].selector;
+          _pendingDesc = _annotations[i].desc;
+          _annotationMode = true;
+          var modal = document.getElementById('feedbackModal');
+          if (modal) modal.classList.add('hidden');
+          var bar = document.getElementById('fbAnnotationBar');
+          if (bar) bar.classList.remove('hidden');
+          _updateBarCount();
+          document.addEventListener('mousemove', _fbOnMouseMove, { passive: true });
+          document.addEventListener('click', _fbOnClick, true);
+          _fbRenderBadges();
+          document.addEventListener('scroll', _fbUpdateBadgePositions, { passive: true, capture: true });
+          window.addEventListener('resize', _fbUpdateBadgePositions, { passive: true });
+      };
+
+      // ── Stow / Batch ───────────────────────────────────────────────────
+      function _updateStowBadge() {
+          var badge = document.getElementById('fbStowBadge');
+          if (badge) {
+              badge.textContent = _stowedItems.length;
+              badge.classList.toggle('hidden', _stowedItems.length === 0);
+          }
+          var btn = document.getElementById('fbSubmitBtn');
+          if (btn && !btn.disabled) {
+              btn.textContent = _stowedItems.length > 0
+                  ? 'Submit (' + (_stowedItems.length + 1) + ' items)'
+                  : 'Submit';
+          }
+      }
+
+      function _renderStowedPanel() {
+          var panel = document.getElementById('fbStowedPanel');
+          var list = document.getElementById('fbStowedList');
+          if (!panel || !list) return;
+          if (_stowedItems.length === 0) { panel.classList.add('hidden'); return; }
+          panel.classList.remove('hidden');
+          var html = '';
+          _stowedItems.forEach(function(item, i) {
+              var annoCount = item.annotations ? item.annotations.length : 0;
+              var annoTag = annoCount ? ' · ' + annoCount + ' annotation' + (annoCount > 1 ? 's' : '') : '';
+              html += '<div class="fb-stow-item">'
+                  + '<div class="fb-ann-row">'
+                  + '<div style="flex:1;min-width:0">'
+                  + '<div class="fb-stow-title">' + _esc(item.title) + '</div>'
+                  + '<div class="fb-stow-page">' + _esc(item.page_path) + annoTag + '</div>'
+                  + '</div>'
+                  + '<div class="fb-ann-row-actions">'
+                  + '<button onclick="_fbEditStowed(' + i + ')" title="Edit">edit</button>'
+                  + '<button class="fb-del" onclick="_fbRemoveStowed(' + i + ')" title="Remove">&times;</button>'
+                  + '</div>'
+                  + '</div>'
+                  + '</div>';
+          });
+          list.innerHTML = html;
+          _updateStowBadge();
+      }
+
+      function _toast(msg, kind) {
+          var t = document.getElementById('fb-toast-el') || document.createElement('div');
+          t.id = 'fb-toast-el';
+          t.className = 'fb-toast' + (kind === 'warn' ? ' fb-toast-warn' : kind === 'err' ? ' fb-toast-err' : '');
+          t.textContent = msg;
+          t.style.opacity = '1';
+          if (!t.parentNode) document.body.appendChild(t);
+          setTimeout(function() { t.style.opacity = '0'; }, 3500);
+      }
+
+      function _captureCurrent() {
+          var title = ((document.getElementById('fbTitle') || {}).value || '').trim();
+          if (!title) return null;
+          return {
+              title: title,
+              description: ((document.getElementById('fbDescription') || {}).value || '').trim(),
+              priority: (document.getElementById('fbPriority') || {}).value || 'medium',
+              page_path: window.location.pathname,
+              page_title: document.title,
+              annotations: _annotations.slice()
+          };
+      }
+
+      function _resetForm() {
+          document.getElementById('fbTitle').value = '';
+          document.getElementById('fbDescription').value = '';
+          document.getElementById('fbPriority').value = 'medium';
+          _annotations = [];
+          _renderAnnotationsList();
+      }
+
+      window._fbStow = function() {
+          var item = _captureCurrent();
+          if (!item) {
+              var t = document.getElementById('fbTitle');
+              if (t) { t.focus(); t.classList.add('fb-input-error'); setTimeout(function() { t.classList.remove('fb-input-error'); }, 1500); }
+              return;
+          }
+          _stowedItems.push(item);
+          _resetForm();
+          _renderStowedPanel();
+          _updateStowBadge();
+          closeFeedbackModal();
+          _toast('Feedback stowed (' + _stowedItems.length + ' item' + (_stowedItems.length > 1 ? 's' : '') + ')', 'warn');
+      };
+
+      window._fbRemoveStowed = function(index) { _stowedItems.splice(index, 1); _renderStowedPanel(); _updateStowBadge(); };
+
+      window._fbEditStowed = function(index) {
+          var item = _stowedItems[index];
+          if (!item) return;
+          document.getElementById('fbTitle').value = item.title;
+          document.getElementById('fbDescription').value = item.description || '';
+          document.getElementById('fbPriority').value = item.priority || 'medium';
+          _annotations = item.annotations ? item.annotations.slice() : [];
+          _renderAnnotationsList();
+          _stowedItems.splice(index, 1);
+          _renderStowedPanel();
+          _updateStowBadge();
+      };
+
+      // ── Open / close ───────────────────────────────────────────────────
+      window.openFeedbackModal = function() {
+          var modal = document.getElementById('feedbackModal');
+          if (!modal) return;
+          var titleInput = document.getElementById('fbTitle');
+          if (titleInput && !titleInput.value) {
+              var heading = document.title.replace(/\s+·\s+Home Website$/i, '').trim();
+              titleInput.value = heading || '';
+          }
+          _renderAnnotationsList();
+          _renderStowedPanel();
+          _updateStowBadge();
+          modal.classList.remove('hidden');
+          setTimeout(function() { if (titleInput) { titleInput.focus(); titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length); } }, 60);
+      };
+
+      window.closeFeedbackModal = function() {
+          if (_annotationMode) _fbEndAnnotation();
+          _fbRemoveBadges();
+          var modal = document.getElementById('feedbackModal');
+          if (modal) modal.classList.add('hidden');
+          _hideAnnotationPopover();
+      };
+
+      document.addEventListener('DOMContentLoaded', function() {
+          var modal = document.getElementById('feedbackModal');
+          if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeFeedbackModal(); });
+          document.addEventListener('keydown', function(e) {
+              if (e.key === 'Escape') {
+                  if (_annotationMode) { _fbCancelAnnotationPopover(); return; }
+                  var m = document.getElementById('feedbackModal');
+                  if (m && !m.classList.contains('hidden')) closeFeedbackModal();
+              }
+          });
+      });
+
+      window._fbSubmit = async function() {
+          var current = _captureCurrent();
+          if (!current && _stowedItems.length === 0) {
+              var t = document.getElementById('fbTitle');
+              if (t) { t.focus(); t.classList.add('fb-input-error'); setTimeout(function() { t.classList.remove('fb-input-error'); }, 1500); }
+              return;
+          }
+          var items = _stowedItems.slice();
+          if (current) items.push(current);
+
+          var btn = document.getElementById('fbSubmitBtn');
+          if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+          try {
+              var res = await fetch('/feedback/api/items', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ items: items })
+              });
+              var data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+              var refs = (data.created || []).map(function(c) { return c.ref_id; }).join(', ');
+              _toast(items.length > 1
+                  ? 'Saved ' + items.length + ' items (' + refs + ')'
+                  : 'Saved ' + refs);
+              _stowedItems = [];
+              _resetForm();
+              closeFeedbackModal();
+              _fbRemoveBadges();
+              _renderStowedPanel();
+              _updateStowBadge();
+          } catch (err) {
+              _toast('Failed to save: ' + err.message, 'err');
+          } finally {
+              if (btn) {
+                  btn.disabled = false;
+                  btn.textContent = _stowedItems.length > 0
+                      ? 'Submit (' + (_stowedItems.length + 1) + ' items)'
+                      : 'Submit';
+              }
+          }
+      };
+  })();
+  {% endraw %}
 
   {% raw %}
   // ── AI Prompt Primer ────────────────────────────────────────────────

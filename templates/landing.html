@@ -8,7 +8,7 @@
 </section>
 
 <section class="hs-app-grid">
-  {% for a in apps %}
+  {% for a in apps if not a.get('hidden') %}
     <a class="hs-app-tile" href="{{ url_for(a.url_endpoint) }}">
       <div class="hs-app-tile-head">
         <span class="hs-app-tile-icon">{{ a.icon }}</span>

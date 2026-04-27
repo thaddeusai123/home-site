@@ -27,6 +27,7 @@ APPS = [
     "apps.nutrient_calc",
     "apps.gpio_lab",
     "apps.sonos",
+    "apps.feedback",
 ]
 
 app = Flask(__name__)
@@ -119,6 +120,23 @@ def init_db():
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS feedback_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref_id      TEXT NOT NULL UNIQUE,
+                page_path   TEXT NOT NULL,
+                page_title  TEXT,
+                title       TEXT NOT NULL,
+                description TEXT,
+                priority    TEXT NOT NULL DEFAULT 'medium'
+                    CHECK(priority IN ('low','medium','high','urgent')),
+                status      TEXT NOT NULL DEFAULT 'new'
+                    CHECK(status IN ('new','in_progress','resolved','dismissed')),
+                annotations TEXT,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_feedback_page ON feedback_items(page_path);
+            CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback_items(status);
         """)
 
 
